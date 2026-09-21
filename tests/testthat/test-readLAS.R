@@ -1,15 +1,13 @@
-context("readLAS")
-
 LASfile <- example_las_path
 ctg <- readLAScatalog(example_las_path, chunk_size = 100, select = "xyzrn")
-cls <- lidR:::catalog_makecluster(ctg)
+cls <- engine_chunks(ctg)
 
 test_that("readLAS reads files", {
   las <- readLAS(LASfile, select = "xyzrn")
 
   expect_is(las, "LAS")
   expect_equal(npoints(las), 30L)
-  expect_equal(names(las@data), c("X", "Y", "Z", "ReturnNumber", "NumberOfReturns"))
+  expect_equal(names(las), c("X", "Y", "Z", "ReturnNumber", "NumberOfReturns"))
 })
 
 test_that("readLAS reads LAScatalog", {
@@ -17,7 +15,7 @@ test_that("readLAS reads LAScatalog", {
 
   expect_is(las, "LAS")
   expect_equal(npoints(las), 30L)
-  expect_equal(names(las@data), c("X", "Y", "Z", "ReturnNumber", "NumberOfReturns"))
+  expect_equal(names(las), c("X", "Y", "Z", "ReturnNumber", "NumberOfReturns"))
 })
 
 test_that("readLAS reads LAScluster", {
@@ -25,7 +23,7 @@ test_that("readLAS reads LAScluster", {
 
   expect_is(las, "LAS")
   expect_equal(npoints(las), 30L)
-  expect_equal(names(las@data), c("X", "Y", "Z", "ReturnNumber", "NumberOfReturns", "buffer"))
+  expect_equal(names(las), c("X", "Y", "Z", "ReturnNumber", "NumberOfReturns", "buffer"))
   expect_true((all(las$buffer == 0)))
 })
 
@@ -62,6 +60,16 @@ test_that("readLAS throws warning for invalid files", {
   expect_equal(las@header@PHB$`Y scale factor`, 0.01234)
 })
 
+test_that("readLAS can read a file with invalid CRS", {
+  example@header@VLR$GeoKeyDirectoryTag$tags[[2]]$`value offset` = 22022
+  f <- tempfile(fileext = ".las")
+  rlas:::C_writer(f, as.list(example@header), example@data)
+  las  <- suppressWarnings(readLAS(f))
+
+  expect_equal(epsg(las), 22022)
+  expect_equal(st_crs(las), sf::NA_crs_)
+})
+
 test_that("readLAS LAScluster throw warning when select/filter is used", {
 
   expect_warning(readLAS(cls[[1]], select = "i"), "Argument 'select' is not used")
@@ -75,12 +83,12 @@ test_that("readLAS LAScatalog gives precedence to argument select and filter", {
 
   las = readLAS(ctg)
 
-  expect_equal(names(las@data), c("X", "Y", "Z"))
+  expect_equal(names(las), c("X", "Y", "Z"))
   expect_equal(npoints(las), 3)
 
   las = readLAS(ctg, select = "i",  filter = "-drop_z_below 975")
 
-  expect_equal(names(las@data), c("X", "Y", "Z", "Intensity"))
+  expect_equal(names(las), c("X", "Y", "Z", "Intensity"))
   expect_equal(npoints(las), 19)
 })
 
@@ -99,7 +107,7 @@ test_that("readMSLAS reads multispectral data", {
   las = readMSLAS(f1, f2, f3)
 
   expect_equal(dim(las@data), c(30, 16))
-  expect_true("ScannerChannel" %in% names(las@data))
+  expect_true("ScannerChannel" %in% names(las))
   expect_equal(las@header@PHB$`Version Minor`, 4L)
   expect_equal(las@header@PHB$`Point Data Format ID`, 6L)
 })

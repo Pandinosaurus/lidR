@@ -1,29 +1,86 @@
-# ===============================================================================
-#
-# PROGRAMMERS:
-#
-# jean-romain.roussel.1@ulaval.ca  -  https://github.com/Jean-Romain/lidR
-#
-# COPYRIGHT:
-#
-# Copyright 2016-2018 Jean-Romain Roussel
-#
-# This file is part of lidRExtra R package.
-#
-# lidR is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <http:#www.gnu.org/licenses/>
-#
-# ===============================================================================
+#' Ground Segmentation Algorithm
+#'
+#' This function is made to be used in \link{classify_ground}. It implements an
+#' algorithm for segmentation of ground points base on a Multiscale Curvature
+#' Classification. This method is a strict implementation of the MCC algorithm
+#' made by Evans and Hudak. (2007) (see references) that relies on the authors'
+#' original source code written and exposed to R via the the \code{RMCC} package.
+#'
+#' There are two parameters that the user must define, the scale (s) parameter and
+#' the curvature threshold (t). The optimal scale parameter is a function of
+#' 1) the scale of the objects (e.g., trees) on the ground, and 2) the sampling
+#' interval (post spacing) of the lidar data. Current lidar sensors are capable
+#' of collecting high density data (e.g., 8 pulses/m2) that translate to a spatial
+#' sampling frequency (post spacing) of 0.35 m/pulse (1/sqrt(8 pulses/m2) = 0.35 m/pulse),
+#' which is small relative to the size of mature trees and will oversample larger
+#' trees (i.e., nominally multiple returns/tree). Sparser lidar data (e.g., 0.25 pulses/m2)
+#' translate to a post spacing of 2.0 m/pulse (1/sqrt(0.25 pulses/m2) = 2.0 m/pulse),
+#' which would undersample trees and fail to sample some smaller trees (i.e.,
+#' nominally <1 return/tree).\cr\cr
+#' Therefore, a bit of trial and error is warranted to determine the best scale
+#' and curvature parameters to use. Select a las tile containing a good variety
+#' of canopy and terrain conditions, as it's likely the parameters that work best
+#' there will be applicable to the rest of your project area tiles. As a starting
+#' point: if the scale (post spacing) of the lidar survey is 1.5 m, then try 1.5.
+#' Try varying it up or down by 0.5 m increments to see if it produces a more desirable
+#' digital terrain model (DTM) interpolated from the classified ground returns in
+#' the output file. Use units that match the units of the lidar data. For example,
+#' if your lidar data were delivered in units of feet with a post spacing of 3 ft,
+#' set the scale parameter to 3, then try varying it up or down by 1 ft increments
+#' and compare the resulting interpolated DTMs. If the trees are large, then
+#' it's likely that a scale parameter of 1 m (3 ft) will produce a cleaner DTM
+#' than a scale parameter of 0.3 m (1 ft), even if the pulse density is 0.3 m
+#' (1 ft). As for the curvature threshold, a good starting value to try might be
+#' 0.3 (if data are in meters; 1 if data are in feet), and then try varying this
+#' up or down by 0.1 m increments (if data are in meters; 0.3 if data are in feet).
+#'
+#' @param s numeric. Scale parameter. The optimal scale parameter is a function of
+#' 1) the scale of the objects (e.g., trees) on the ground, and 2) the sampling
+#' interval (post spacing) of the lidar data.
+#' @param t numeric. Curvature threshold
+#'
+#' @references Evans, Jeffrey S.; Hudak, Andrew T. 2007. A multiscale curvature
+#' algorithm for classifying discrete return LiDAR in forested environments.
+#' IEEE Transactions on Geoscience and Remote Sensing. 45(4): 1029-1038.
+#'
+#' @family ground segmentation algorithms
+#'
+#' @examples
+#' if (require(RMCC, quietly = TRUE))
+#' {
+#' LASfile <- system.file("extdata", "Topography.laz", package="lidR")
+#' las <- readLAS(LASfile, select = "xyzrn", filter = "-inside 273450 5274350 273550 5274450")
+#'
+#' las <- classify_ground(las, mcc(1.5,0.3))
+#' #plot(las, color = "Classification")
+#' }
+#' @export
+#' @return A function
+#' @name gnd_mcc
+mcc <- function(s = 1.5, t = 0.3)
+{
+  s <- lazyeval::uq(s)
+  t <- lazyeval::uq(t)
+
+  assert_is_a_number(s)
+  assert_is_a_number(t)
+  assert_package_is_installed("RMCC")
+
+  f = function(las, filter)
+  {
+    . <- X <- Y <- Z <- idx <- NULL
+    assert_is_valid_context(LIDRCONTEXTGND, "mcc")
+    las@data[["idx"]] <- 1:npoints(las)
+    cloud <- las@data
+    if (length(filter) > 1) cloud <- cloud[filter, .(X,Y,Z, idx)]
+    gnd <- RMCC::MCC(cloud, s, t)
+    ids <- cloud$idx[gnd]
+    return(ids)
+  }
+
+  f <- plugin_gnd(f)
+  return(f)
+}
 
 #' Ground Segmentation Algorithm
 #'
@@ -36,6 +93,26 @@
 #' Here, these parameters are free and specified by the user. The function \link{util_makeZhangParam}
 #' enables computation of the parameters according to the original paper.
 #'
+#' The progressive morphological filter allows for any sequence of parameters. The `util_makeZhangParam`
+#' function enables computation of the sequences using equations (4),
+#'  (5) and (7) from Zhang et al. (see reference and details).
+#' @details
+#' In the original paper the windows size sequence is given by eq. 4 or 5:\cr\cr
+#' \eqn{w_k = 2kb + 1} \cr\cr
+#' or\cr\cr
+#' \eqn{w_k = 2b^k + 1}\cr\cr
+#' In the original paper the threshold sequence is given by eq. 7:\cr\cr
+#' \eqn{th_k = s*(w_k - w_{k-1})*c + th_0}\cr\cr
+#' Because the function \link{classify_ground} applies the morphological operation at the point
+#' cloud level the parameter \eqn{c} is set to 1 and cannot be modified.
+#'
+#' @param b numeric. This is the parameter \eqn{b} in Zhang et al. (2003) (eq. 4 and 5).
+#' @param max_ws numeric. Maximum window size to be used in filtering ground returns. This limits
+#' the number of windows created.
+#' @param dh0 numeric. This is \eqn{dh_0} in Zhang et al. (2003) (eq. 7).
+#' @param dhmax numeric. This is \eqn{dh_{max}} in Zhang et al. (2003) (eq. 7).
+#' @param s numeric. This is \eqn{s} in Zhang et al. (2003) (eq. 7).
+#' @param exp logical. The window size can be increased linearly or exponentially (eq. 4 or 5).
 #' @param ws numeric. Sequence of windows sizes to be used in filtering ground returns.
 #' The values must be positive and in the same units as the point cloud (usually meters, occasionally
 #' feet).
@@ -60,6 +137,8 @@
 #'
 #' las <- classify_ground(las, pmf(ws, th))
 #' #plot(las, color = "Classification")
+#' @return A function
+#' @name gnd_pmf
 pmf = function(ws, th)
 {
   ws <- lazyeval::uq(ws)
@@ -72,7 +151,7 @@ pmf = function(ws, th)
     return(C_pmf(las, ws, th, filter))
   }
 
-  class(f) <- LIDRALGORITHMGND
+  f <- plugin_gnd(f)
   return(f)
 }
 
@@ -106,12 +185,17 @@ pmf = function(ws, th)
 #' @family ground segmentation algorithms
 #'
 #' @examples
+#' if (require(RCSF, quietly = TRUE))
+#' {
 #' LASfile <- system.file("extdata", "Topography.laz", package="lidR")
 #' las <- readLAS(LASfile, select = "xyzrn")
 #'
 #' mycsf <- csf(TRUE, 1, 1, time_step = 1)
 #' las <- classify_ground(las, mycsf)
 #' #plot(las, color = "Classification")
+#' }
+#' @return A function
+#' @name gnd_csf
 csf = function(sloop_smooth = FALSE, class_threshold = 0.5, cloth_resolution = 0.5, rigidness = 1L, iterations = 500L, time_step = 0.65)
 {
   sloop_smooth     <- lazyeval::uq(sloop_smooth)
@@ -136,47 +220,102 @@ csf = function(sloop_smooth = FALSE, class_threshold = 0.5, cloth_resolution = 0
 
     las@data[["idx"]] <- 1:npoints(las)
     cloud <- las@data[filter, .(X,Y,Z, idx)]
-    gnd <- RCSF:::R_CSF(cloud, sloop_smooth, class_threshold, cloth_resolution, rigidness, iterations, time_step)
+    gnd <- RCSF::CSF(cloud, sloop_smooth, class_threshold, cloth_resolution, rigidness, iterations, time_step)
     idx <- cloud$idx[gnd]
     return(idx)
   }
 
-  class(f) <- LIDRALGORITHMGND
+  f <- plugin_gnd(f)
   return(f)
 }
 
-#' Parameters for progressive morphological filter
+
+#' Progressive TIN Densification
 #'
-#' The function \link{classify_ground} with the progressive morphological filter allows for any
-#' sequence of parameters. This function enables computation of the sequences using equations (4),
-#'  (5) and (7) from Zhang et al. (see reference and details).
-#' @details
-#' In the original paper the windows size sequence is given by eq. 4 or 5:\cr\cr
+#' Classify ground points using a modified version of the Progressive TIN
+#' densification method by Axelsson (2000) (see references). The approach involves iteratively
+#' constructing a triangulated surface model (TIN) to classify ground points (see details).
 #'
-#' \eqn{w_k = 2kb + 1} \cr\cr
-#' or\cr\cr
-#' \eqn{w_k = 2b^k + 1}\cr\cr
+#' The method begins by identifying local low points, assuming at least one ground-level point exists
+#' within any X meters area. Initially, the triangles of the TIN model are mostly below the ground
+#' surface, only touching lowest points at their vertices. As the iterations progress, additional
+#' points are incorporated to more accurately follow the true ground surface.\cr\cr
+#' The classification process is controlled by two main parameters:
+#' \itemize{
+#' \item Iteration angle: This controls the rate at which points are classified based on variations in
+#' ground level. Use smaller values (e.g., 20) for flat terrain and larger values (e.g., 40) for
+#' mountainous regions.
+#' \item Iteration distance: This limits large upward jumps in the model, preventing the misclassification
+#'  of points in low vegetation or on small buildings.
+#' }
+#' The algorithm is robust to low noise points, meaning it can handle some level of noise without
+#' needing explicit noise classification. However, it is preferable to have noise classified points
+#' to guarantee optimal results.
+#' \cr\cr
+#' The densification process can also stop if the triangle edges become shorter than a specified length.
 #'
-#' In the original paper the threshold sequence is given by eq. 7:\cr\cr
-#' \eqn{th_k = s*(w_k - w_{k-1})*c + th_0}\cr\cr
-#' Because the function \link{classify_ground} applies the morphological operation at the point
-#' cloud level the parameter \eqn{c} is set to 1 and cannot be modified.
-#' @param b numeric. This is the parameter \eqn{b} in Zhang et al. (2003) (eq. 4 and 5).
-#' @param max_ws numeric. Maximum window size to be used in filtering ground returns. This limits
-#' the number of windows created.
-#' @param dh0 numeric. This is \eqn{dh_0} in Zhang et al. (2003) (eq. 7).
-#' @param dhmax numeric. This is \eqn{dh_{max}} in Zhang et al. (2003) (eq. 7).
-#' @param s numeric. This is \eqn{s} in Zhang et al. (2003) (eq. 7).
-#' @param exp logical. The window size can be increased linearly or exponentially (eq. 4 or 5).
-#' @return A list with two components: the windows size sequence and the threshold sequence.
+#' @param distance Scalar. The threshold for iteration distance, as described in Figure 3 of Axelsson's paper.
+#' @param angle Scalar. The threshold for iteration angle, as illustrated in Figure 3 of Axelsson's paper.
+#' Use smaller values (close to 20) for flat areas and larger values (close to 40) for mountainous
+#' areas.
+#' @param res Scalar. The resolution for locating seed points. It takes the lowest point per grid cell.
+#' It should be larger than any above ground structure such as building or bridges. In forested lands
+#' 10 m is good but larger values are recommended if human made structure can be observed. 50 m is
+#' good in urban scene
+#' @param spacing Scalar. The spacing of ground points. TIN densification halts if triangles are
+#' smaller than this limit avoiding useless over-densification. The default setting is generally suitable
+#' for most scenarios.
+#' @param verbose bool
+#'
 #' @references
-#' Zhang, K., Chen, S. C., Whitman, D., Shyu, M. L., Yan, J., & Zhang, C. (2003). A progressive
-#' morphological filter for removing nonground measurements from airborne LIDAR data. IEEE
-#' Transactions on Geoscience and Remote Sensing, 41(4 PART I), 872–882. http:#doi.org/10.1109/TGRS.2003.810682.
+#' Axelsson, P. (2000). DEM Generation from Laser Scanner Data Using adaptive TIN Models. International
+#' Archives of Photogrammetry and Remote Sensing, 33(B4), 110–117.
+#' https://www.isprs.org/proceedings/xxxiii/congress/part4/111_xxxiii-part4.pdf
+#'
 #' @export
+#' @family ground segmentation algorithms
+#' @md
 #'
 #' @examples
-#' p = util_makeZhangParam()
+#' LASfile <- system.file("extdata", "Topography.laz", package="lidR")
+#' las <- readLAS(LASfile, select = "xyzrn")
+#'
+#' myptd <- ptd(res = 20, distance = 1, angle = 20)
+#' las <- classify_ground(las, myptd)
+#' #plot(las, color = "Classification")
+#' @return A function
+ptd = function(res = 10, angle = 30, distance = 2, spacing = 0.25, verbose = FALSE)
+{
+  res     <- lazyeval::uq(res)
+  angle   <- lazyeval::uq(angle)
+  distance <- lazyeval::uq(distance)
+  spacing  <- lazyeval::uq(spacing)
+  verbose  <- lazyeval::uq(verbose)
+
+  assert_is_a_bool(verbose)
+  assert_is_a_number(res)
+  assert_is_a_number(angle)
+  assert_is_a_number(distance)
+  assert_is_a_number(spacing)
+
+  f = function(las, filter)
+  {
+    . <- X <- Y <- Z <- NULL
+    assert_is_valid_context(LIDRCONTEXTGND, "ptd")
+
+    las@data[["idx"]] <- 1:npoints(las)
+    cloud <- las@data[filter, .(X,Y,Z, idx)]
+    gnd <- C_ptd(cloud, res, angle, distance, spacing, verbose, get_lidr_threads())
+    idx <- cloud$idx[gnd+1]
+    return(idx)
+  }
+
+  f <- plugin_gnd(f)
+  return(f)
+}
+
+#' @export
+#' @rdname gnd_pmf
 util_makeZhangParam = function(b = 2, dh0 = 0.5, dhmax = 3.0, s = 1.0,  max_ws = 20, exp = FALSE)
 {
   if (exp & b <= 1)

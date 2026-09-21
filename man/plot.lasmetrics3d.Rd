@@ -7,20 +7,25 @@
 \method{plot}{lasmetrics3d}(x, y, ...)
 }
 \arguments{
-\item{x}{An object of the class \code{'lasmetrics3d'}}
+\item{x}{An object of the class \code{lasmetrics3d}}
 
 \item{y}{Unused (inherited from R base)}
 
 \item{\dots}{Supplementary parameters for \link[lidR:plot]{plot}. The function internally uses the
 same plot function than LAS objects.}
 }
+\value{
+Use for side effect of opening a rgl 3D windows. Returns a size 2 vector of scene offset.
+}
 \description{
 This function implements a 3D plot method for 'lasmetrics3d' objects
 }
 \examples{
+\dontrun{
 LASfile <- system.file("extdata", "Megaplot.laz", package="lidR")
 lidar = readLAS(LASfile)
 
 voxels = voxel_metrics(lidar, list(Imean = mean(Intensity)), res = 5)
 plot(voxels, color = "Imean", colorPalette = heat.colors(50), trim=60)
+}
 }

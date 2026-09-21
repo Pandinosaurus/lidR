@@ -1,10 +1,11 @@
 catalog_overlaps <- function(catalog)
 {
-  spdf <- as.spatial(catalog)
-  ii <- rgeos::gIntersects(spdf, byid = TRUE, returnDense = FALSE)
+  geom <- sf::st_geometry(st_as_sf(catalog))
+  ii <- sf::st_intersects(geom)
+
+  if (is_lascatalog_v3(catalog)) catalog <- lascatalog_v3_repair(catalog)
 
   intersections <- vector("list", length(ii))
-
   for (i in 1:length(ii))
   {
     k <- ii[[i]]
@@ -12,30 +13,13 @@ catalog_overlaps <- function(catalog)
 
     if (length(k) == 0) next
 
-    p <- spdf[k, ]
-    q <- spdf[i, ]
-    w <- rgeos::gIntersection(q, p)
+    p <- geom[k]
+    q <- geom[i]
+    w <- sf::st_intersection(q, p)
 
-    if (is(w, "SpatialPoints")) next
-
-    if (is(w, "SpatialLines")) next
-
-    if (is(w, "SpatialCollections")) {
-      if (is.null(w@polyobj)) next
-      w <- w@polyobj
-    }
-
-    w@polygons[[1]]@ID <- as.character(i)
     intersections[[i]] <- w
   }
 
-  if (all(sapply(intersections, is.null))) {
-    empty <- sp::SpatialPolygons(list())
-    raster::projection(empty) <- raster::projection(catalog)
-    return(empty)
-  }
-
-  output <- do.call(rbind, intersections)
-  output <- rgeos::gUnaryUnion(output)
-  return(output)
+  intersections <- do.call(c, intersections)
+  return(intersections)
 }

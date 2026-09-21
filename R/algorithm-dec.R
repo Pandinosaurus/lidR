@@ -1,37 +1,7 @@
-# ===============================================================================
-#
-# PROGRAMMERS:
-#
-# jean-romain.roussel.1@ulaval.ca  -  https://github.com/Jean-Romain/lidR
-#
-# COPYRIGHT:
-#
-# Copyright 2016-2018 Jean-Romain Roussel
-#
-# This file is part of lidR R package.
-#
-# lidR is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>
-#
-# ===============================================================================
-
-
-
 #' Point Cloud Decimation Algorithm
 #'
 #' This function is made to be used in \link{decimate_points}. It implements an algorithm that
-#' randomly removes points or pulses to reach the desired density over the whole area (see
-#' \code{\link[=area]{area}}).
+#' randomly removes points or pulses to reach the desired density over the area.
 #'
 #' @param density numeric. The desired output density.
 #'
@@ -48,8 +18,10 @@
 #'
 #' # Reach a pulse density of 1 on the overall dataset
 #' thinned1 = decimate_points(las, random(1))
-#' plot(grid_density(las))
-#' plot(grid_density(thinned1))
+#' plot(rasterize_density(las))
+#' plot(rasterize_density(thinned1))
+#' @return A function
+#' @name sample_random
 random = function(density, use_pulse = FALSE)
 {
   assert_is_a_number(density)
@@ -63,7 +35,7 @@ random = function(density, use_pulse = FALSE)
   {
     assert_is_valid_context(LIDRCONTEXTDEC, "random")
 
-    if(use_pulse & !"pulseID" %in% names(las@data))
+    if(use_pulse & !"pulseID" %in% names(las))
     {
       warning("No 'pulseID' attribute found. Decimation by points is used.")
       use_pulse <- FALSE
@@ -76,13 +48,17 @@ random = function(density, use_pulse = FALSE)
     else
     {
       if (nrow(las@data) > n)
-        return(sample(1:nrow(las@data), n))
+      {
+        idx = sample(1:nrow(las@data), n)
+        idx = sort(idx)
+        return(idx)
+      }
       else
         return(1:nrow(las@data))
     }
   }
 
-  class(f) <- LIDRALGORITHMDEC
+  f <- plugin_decimate(f)
   return(f)
 }
 
@@ -94,7 +70,7 @@ random = function(density, use_pulse = FALSE)
 #' the coverage area. For each cell, the proportion of points or pulses that will be retained is computed
 #' using the actual local density and the desired density. If the desired density is greater than the actual
 #' density it returns an unchanged set of points (it cannot increase the density). The cell size must be
-#' large enough to compute a coherent local density. For example in a 2 points/m^2 point cloud, 25 square
+#' large enough to compute a coherent local density. For example, in a 2 points/m^2 point cloud, 25 square
 #' meters would be feasible; however 1 square meter cells would not be feasible because density does
 #' not have meaning at this scale.
 #'
@@ -114,8 +90,10 @@ random = function(density, use_pulse = FALSE)
 #' las = readLAS(LASfile, select = "xyz")
 #'
 #' # Select points randomly to reach an homogeneous density of 1
-#' thinned = decimate_points(las, homogenize(1,5))
-#' plot(grid_density(thinned, 10))
+#' thinned <- decimate_points(las, homogenize(1,5))
+#' plot(rasterize_density(thinned, 10))
+#' @return A function
+#' @name sample_homogenize
 homogenize = function(density, res = 5, use_pulse = FALSE)
 {
   assert_is_a_number(density)
@@ -132,7 +110,7 @@ homogenize = function(density, res = 5, use_pulse = FALSE)
   {
     assert_is_valid_context(LIDRCONTEXTDEC, "homogenize")
 
-    if (use_pulse & !"pulseID" %in% names(las@data))
+    if (use_pulse & !"pulseID" %in% names(las))
     {
       warning("No 'pulseID' attribute found. Decimation by points is used.")
       use_pulse <- FALSE
@@ -141,8 +119,8 @@ homogenize = function(density, res = 5, use_pulse = FALSE)
     pulseID <- NULL
 
     n       <- round(density*res^2)
-    layout  <- rOverlay(las, res)
-    cells   <- raster::cellFromXY(layout, coordinates(las))
+    layout  <- raster_layout(las, res)
+    cells   <- get_group(layout, las)
 
     if (use_pulse)
       return(las@data[, .I[.selected_pulses(pulseID, n)], by = cells]$V1)
@@ -150,14 +128,14 @@ homogenize = function(density, res = 5, use_pulse = FALSE)
       return(las@data[, .I[.selected_pulses(1:.N, n)], by = cells]$V1)
   }
 
-  class(f) <- LIDRALGORITHMDEC
+  f <- plugin_decimate(f)
   return(f)
 }
 
 #' Point Cloud Decimation Algorithm
 #'
-#' These functions are made to be used in \link{decimate_points}. They implements algorithms that
-#' creates a grid with a given resolution and filters the point cloud by selecting the highest/lowest
+#' These functions are made to be used in \link{decimate_points}. They implement algorithms that
+#' create a grid with a given resolution and filters the point cloud by selecting the highest/lowest
 #' point within each cell.
 #'
 #' @param res numeric. The resolution of the grid used to filter the point cloud
@@ -177,8 +155,8 @@ homogenize = function(density, res = 5, use_pulse = FALSE)
 #' # Select the lowest point within each cell of an overlayed grid
 #' thinned = decimate_points(las, lowest(4))
 #' #plot(thinned)
-#' @rdname maxima
-#' @name maxima
+#' @return A function
+#' @name sample_maxima
 highest = function(res = 1)
 {
   assert_is_a_number(res)
@@ -189,17 +167,17 @@ highest = function(res = 1)
   f = function(las)
   {
     assert_is_valid_context(LIDRCONTEXTDEC, "highest")
-    layout  <- rOverlay(las, res)
+    layout <- raster_layout(las, res)
     return(C_highest(las, layout))
   }
 
-  class(f) <- LIDRALGORITHMDEC
+  f <- plugin_decimate(f)
   return(f)
 }
 
-#' @rdname maxima
 #' @family point cloud decimation algorithms
 #' @export
+#' @name sample_maxima
 lowest = function(res = 1)
 {
   assert_is_a_number(res)
@@ -210,11 +188,130 @@ lowest = function(res = 1)
   f = function(las)
   {
     assert_is_valid_context(LIDRCONTEXTDEC, "lowest")
-    layout  <- rOverlay(las, res)
+    layout <- raster_layout(las, res)
     return(C_lowest(las, layout))
   }
 
-  class(f) <- LIDRALGORITHMDEC
+  f <- plugin_decimate(f)
+  return(f)
+}
+
+#' Point Cloud Decimation Algorithm
+#'
+#' These functions are made to be used in \link{decimate_points}. They implements algorithm that
+#' creates a 3D grid with a given resolution and filters the point cloud by selecting
+#' points of interest within each voxel. `random_per_voxel()` sample random points. `barycenter_per_voxel()`
+#' samples the point that is the closest to the barycenter of the points within a given voxel.
+#' `[lowest|highest]_attribute_per_voxel()` sample respectively the point that have the highest/lowest
+#' attribute (e.g. Intensity) per voxel.
+#'
+#' @param res numeric. The resolution of the voxel grid used to filter the point cloud
+#' @param n integer. The number of points to select
+#' @param attribute string name of an attribute (such as 'intensity')
+#'
+#' @examples
+#' LASfile <- system.file("extdata", "Megaplot.laz", package="lidR")
+#' las <- readLAS(LASfile, select = "xyz")
+#' thinned <- decimate_points(las, random_per_voxel(8, 1))
+#' #plot(thinned)
+#' @family point cloud decimation algorithms
+#' @export
+#' @return A function
+#' @name sample_per_voxel
+random_per_voxel = function(res = 1, n = 1)
+{
+  assert_all_are_positive(n)
+  assert_all_are_positive(res)
+  n <- as.integer(n)
+  if (length(res) == 1) res <- c(res, res)
+
+  n <- lazyeval::uq(n)
+  res <- lazyeval::uq(res)
+
+  f = function(las)
+  {
+    by <- group_grid_3d(las$X, las$Y, las$Z, res)
+    return(las@data[, .I[.selected_pulses(1:.N, n)], by = by]$V1)
+  }
+
+  f <- plugin_decimate(f)
+  return(f)
+}
+
+#' @export
+#' @rdname sample_per_voxel
+barycenter_per_voxel = function(res = 1)
+{
+  assert_all_are_positive(res)
+  res <- lazyeval::uq(res)
+
+  f = function(las)
+  {
+    X <- Y <- Z <- NULL
+
+    id = C_voxel_id(las, res)
+
+    which.mean = function(X,Y,Z)
+    {
+      x = mean(X)
+      y = mean(Y)
+      z = mean(Z)
+      d = (X-x)^2 + (Y-y)^1 + (Z-z)^2
+      return(which.min(d))
+    }
+
+    return(las@data[, .I[which.mean(X,Y,Z)], by = id]$V1)
+  }
+
+  f <- plugin_decimate(f)
+  return(f)
+
+}
+
+#' @export
+#' @rdname sample_per_voxel
+lowest_attribute_per_voxel = function(res, attribute = "Z")
+{
+  assert_all_are_positive(res)
+  assert_is_character(attribute)
+
+  res <- lazyeval::uq(res)
+  attribute <- lazyeval::uq(attribute)
+
+  f = function(las)
+  {
+    if (!attribute %in% names(las))
+      stop(paste0(attribute, " is not an attribute in this point cloud"), call. = FALSE)
+
+    tmp <- NULL
+    voxelID = C_voxel_id(las, res)
+    las@data$tmp = las@data[[attribute]]
+    return(las@data[, .I[which.min(tmp)], by = voxelID]$V1)
+  }
+
+  f <- plugin_decimate(f)
+  return(f)
+}
+
+#' @export
+#' @rdname sample_per_voxel
+highest_attribute_per_voxel = function(res, attribute = "Z")
+{
+  assert_all_are_positive(res)
+  assert_is_character(attribute)
+  tmp <- NULL
+
+  res <- lazyeval::uq(res)
+  attribute <- lazyeval::uq(attribute)
+
+  f = function(las)
+  {
+    voxelID = C_voxel_id(las, res)
+    las@data$tmp = las@data[[attribute]]
+    return(las@data[, .I[which.max(tmp)], by = voxelID]$V1)
+  }
+
+  f <- plugin_decimate(f)
   return(f)
 }
 
@@ -227,7 +324,9 @@ lowest = function(res = 1)
     return(rep(TRUE, length(pulseID)))
 
   selectedPulses <- sample(p, n)
+  selectedPulses <- sort(selectedPulses)
   selectedPulses <- pulseID %in% selectedPulses
+
 
   return(selectedPulses)
 }

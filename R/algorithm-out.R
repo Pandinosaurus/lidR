@@ -36,6 +36,8 @@
 #' @references
 #' https://pointclouds.org/documentation/tutorials/statistical_outlier.html \cr
 #' https://www.cloudcompare.org/doc/wiki/index.php?title=SOR_filter
+#' @return A function
+#' @name noise_sor
 sor = function(k = 10, m = 3, quantile = FALSE)
 {
   assert_is_a_number(k)
@@ -55,7 +57,7 @@ sor = function(k = 10, m = 3, quantile = FALSE)
   f = function(las)
   {
     assert_is_valid_context(LIDRCONTEXTOUT, "sor")
-    dmean <- C_fast_knn_metrics(las, k, 1, getThreads())
+    dmean <- C_knn_distance(las, k, getThreads())
     if (quantile) {
       th <- quantile(dmean, probs = m)
     } else {
@@ -67,7 +69,7 @@ sor = function(k = 10, m = 3, quantile = FALSE)
     return(dmean > th)
   }
 
-  class(f) <- c(LIDRALGORITHMOUT, LIDRALGORITHMOPENMP)
+  f <- plugin_outliers(f, omp = TRUE)
   return(f)
 }
 
@@ -75,7 +77,6 @@ sor = function(k = 10, m = 3, quantile = FALSE)
 #'
 #' This function is made to be used in \link{classify_noise}. It implements an
 #' algorithm for outliers (noise) segmentation based on isolated voxels filter (IVF).
-#' It is similar to \href{https://rapidlasso.com/lastools/lasnoise/}{lasnoise from lastools}.
 #' The algorithm finds points that have only a few other points in their surrounding
 #' 3 x 3 x 3 = 27 voxels.
 #'
@@ -98,6 +99,8 @@ sor = function(k = 10, m = 3, quantile = FALSE)
 #' las$Z[id] = las$Z[id] + err
 #'
 #' las <- classify_noise(las, ivf(5,2))
+#' @return A function
+#' @name noise_ivf
 ivf = function(res = 5, n = 6)
 {
   assert_is_a_number(res)
@@ -114,7 +117,7 @@ ivf = function(res = 5, n = 6)
     return(C_isolated_voxel(las, res, n))
   }
 
-  class(f) <- c(LIDRALGORITHMOUT)
+  f <- plugin_outliers(f)
   return(f)
 }
 

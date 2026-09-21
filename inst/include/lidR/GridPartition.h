@@ -184,8 +184,15 @@ template<typename T> void GridPartition::lookup(T& shape, std::vector<PointXYZ>&
   int colmax = std::ceil((xmax - this->xmin) / xres);
   int rowmin = std::floor((this->ymax - ymax) / yres);
   int rowmax = std::ceil((this->ymax - ymin) / yres);
-  int laymin = std::floor((zmin - this->zmin) / zres);
-  int laymax = std::ceil((zmax - this->zmin) / zres);
+
+  int laymin = 0;
+  int laymax = nlayers;
+  if (zmin > this->zmin && zmax < this->zmax)
+  {
+    laymin = std::floor((zmin - this->zmin) / zres);
+    laymax = std::ceil((zmax - this->zmin) / zres);
+  }
+
   int cell;
 
   res.clear();
@@ -349,8 +356,6 @@ inline void GridPartition::build(const Rcpp::NumericVector x, const Rcpp::Numeri
   // The depth is still used to compute the number of cells
   unsigned int n = x.size();
   unsigned int depth = (n > 0) ? std::floor(std::log(n)/std::log(4)) : 0;
-  depth = (depth >= 0) ? depth : 0;
-  depth = (depth >= 8) ? 8 : depth;
   ncells = (1 << depth) * (1 << depth);
 
   // Compute some indicator of shape

@@ -9,6 +9,10 @@ cmpCPA <- function(pulsedt) {
     .Call(`_lidR_cmpCPA`, pulsedt)
 }
 
+C_chm_prep <- function(data, snlin, sncol, lap_size, thr_cav, thr_spk, med_size, dil_radius, nodata) {
+    .Call(`_lidR_C_chm_prep`, data, snlin, sncol, lap_size, thr_cav, thr_spk, med_size, dil_radius, nodata)
+}
+
 C_dalponte2016 <- function(Image, Seeds, th_seed, th_crown, th_tree, DIST) {
     .Call(`_lidR_C_dalponte2016`, Image, Seeds, th_seed, th_crown, th_tree, DIST)
 }
@@ -29,6 +33,14 @@ C_tsearch <- function(D, P, X, ncpu) {
     .Call(`_lidR_C_tsearch`, D, P, X, ncpu)
 }
 
+C_ptd <- function(df, res, angle, distance, spacing, verbose, ncores) {
+    .Call(`_lidR_C_ptd`, df, res, angle, distance, spacing, verbose, ncores)
+}
+
+C_spikefree <- function(df, grid, d_f, h_b, slope = 1.96, intercept = 1.42) {
+    .Call(`_lidR_C_spikefree`, df, grid, d_f, h_b, slope, intercept)
+}
+
 C_lmf <- function(las, ws, min_height, circular, ncpu) {
     .Call(`_lidR_C_lmf`, las, ws, min_height, circular, ncpu)
 }
@@ -45,8 +57,8 @@ C_lowest <- function(las, layout) {
     .Call(`_lidR_C_lowest`, las, layout)
 }
 
-C_in_polygon <- function(las, wkt, ncpu) {
-    .Call(`_lidR_C_in_polygon`, las, wkt, ncpu)
+C_in_polygon <- function(las, polygons, by_poly) {
+    .Call(`_lidR_C_in_polygon`, las, polygons, by_poly)
 }
 
 C_lasdetectshape <- function(las, method, th, k, filter, ncpu) {
@@ -77,8 +89,12 @@ C_point_metrics <- function(las, k, r, nalloc, call, env, filter) {
     .Call(`_lidR_C_point_metrics`, las, k, r, nalloc, call, env, filter)
 }
 
-C_fast_knn_metrics <- function(las, k, metrics, cpu) {
-    .Call(`_lidR_C_fast_knn_metrics`, las, k, metrics, cpu)
+is_disable_point_metrics <- function() {
+    .Call(`_lidR_is_disable_point_metrics`)
+}
+
+C_knn_distance <- function(las, k, cpu) {
+    .Call(`_lidR_C_knn_distance`, las, k, cpu)
 }
 
 C_lasrangecorrection <- function(las, flightlines, Rs, f) {
@@ -89,8 +105,8 @@ C_lasrange <- function(las, flightlines) {
     .Call(`_lidR_C_lasrange`, las, flightlines)
 }
 
-C_local_maximum <- function(las, ws, ncpu) {
-    .Call(`_lidR_C_local_maximum`, las, ws, ncpu)
+C_local_maximum <- function(las, ws, filter, ncpu) {
+    .Call(`_lidR_C_local_maximum`, las, ws, filter, ncpu)
 }
 
 C_isolated_voxel <- function(las, res, isolated) {
@@ -99,6 +115,22 @@ C_isolated_voxel <- function(las, res, isolated) {
 
 C_check_gpstime <- function(t, rn) {
     .Call(`_lidR_C_check_gpstime`, t, rn)
+}
+
+C_eigen_metrics <- function(las, k, r, coeffs, filter, ncpu) {
+    .Call(`_lidR_C_eigen_metrics`, las, k, r, coeffs, filter, ncpu)
+}
+
+C_fast_eigen_decomposition <- function(las, k, r, coeffs, ncpu) {
+    .Call(`_lidR_C_fast_eigen_decomposition`, las, k, r, coeffs, ncpu)
+}
+
+C_connected_component <- function(las, res, connectivity) {
+    .Call(`_lidR_C_connected_component`, las, res, connectivity)
+}
+
+C_voxel_id <- function(las, res) {
+    .Call(`_lidR_C_voxel_id`, las, res)
 }
 
 fast_table <- function(x, size = 5L) {
@@ -129,6 +161,10 @@ roundc <- function(x, digit = 0L) {
     .Call(`_lidR_roundc`, x, digit)
 }
 
+bitmerge <- function(u, v) {
+    .Call(`_lidR_bitmerge`, u, v)
+}
+
 fast_eigen_values <- function(A) {
     .Call(`_lidR_fast_eigen_values`, A)
 }
@@ -151,6 +187,30 @@ C_knn2d_lookup <- function(las, x, y, k) {
 
 C_knn3d_lookup <- function(las, x, y, z, k) {
     .Call(`_lidR_C_knn3d_lookup`, las, x, y, z, k)
+}
+
+is_altrep <- function(x) {
+    .Call(`_lidR_is_altrep`, x)
+}
+
+is_materialized <- function(x) {
+    .Call(`_lidR_is_materialized`, x)
+}
+
+altrep_full_class <- function(x) {
+    .Call(`_lidR_altrep_full_class`, x)
+}
+
+cpp_concaveman <- function(x, y, concavity, lengthThreshold, chull) {
+    .Call(`_lidR_cpp_concaveman`, x, y, concavity, lengthThreshold, chull)
+}
+
+cpp_knn <- function(data, k, ncpu) {
+    .Call(`_lidR_cpp_knn`, data, k, ncpu)
+}
+
+cpp_knnx <- function(data, query, k, ncpu) {
+    .Call(`_lidR_cpp_knnx`, data, query, k, ncpu)
 }
 
 R_omp_get_max_threads <- function() {

@@ -1,333 +1,327 @@
-If you are viewing this file on CRAN, please check [the latest news on GitHub](https://github.com/Jean-Romain/lidR/blob/master/NEWS.md) where the formatting is also better
+If you are viewing this file on CRAN, please check [the latest news on GitHub](https://github.com/r-lidar/lidR/blob/master/NEWS.md) where the formatting is also better
 
-## lidR v3.1.4 (Release date: 2021-06-22)
+## lidR v4.3.3 (Release date: 2026-09)
 
-- Change: `manual()` now uses the middle button to perform the selection. Historically the button was "right" but later the right button was added in lidR and attributed to the dragging action. By using "right" in this function this disabled the possibility to drag the scene. Consequently we changed the default to use the middle button. ([#442](https://github.com/Jean-Romain/lidR/issues/442)).
-- Change: `manual()` now removes all apices in the selection rectangle when removing some false positive ([#445](https://github.com/Jean-Romain/lidR/issues/445)).
-- Doc: fix some code block rendering in `catalog_apply` man page
-- Fix: fix catalog processing engine edge case when the last chunks fail ([#435](https://github.com/Jean-Romain/lidR/issues/435)).
-- Fix: `voxel_metrics()` with `all_voxels = TRUE` did not work as expected. The insertion of empty voxels corrupted some of the real voxels. This bug lead to invalid output and some floating points precision errors lead to supernumerary voxels ([#437](https://github.com/Jean-Romain/lidR/issues/437), [#439](https://github.com/Jean-Romain/lidR/issues/439)).
-- Fix: `grid_terrain()` used with a `LAScatalog` no longer propagated the options. For example when using `use_class = c(2L, 8L, 9L, 10L)` this was not propagated and the option was actually the default one i.e. `use_class = c(2L, 9L)`. This bug was introduced in 3.1.0
-- Fix: `delineate_crowns()` now returns `NULL` if the input point-cloud has only points with treeID = NA. It also triggers a warning. ([#438](https://github.com/Jean-Romain/lidR/issues/438)).
-- Fix: `manual()` the function that allow for finding the trees manually was no longer working probably because of some slight modifications in the `rgl` package.
-- Enhance: the `plot` function used to display the output of `voxel_metrics()` now internally uses the same function than `LAS` objects. This enhances the rendering using the `clear_artifact` option by default and allows for a lot more flexibility in the rendering.
-- Enhance: new parameter `button` in `manual()` to choose which button to use.
-- Enhance: `segment_trees()` now print a message if all points are `NA` to suggest to use other parameters
+- Reupload
 
-## lidR v3.1.3 (Release date: 2021-05-20)
+## lidR v4.3.2 (Release date: 2026-04)
 
-- Fix: `las_check(..., deep = TRUE)` was not working in parallel ([#411](https://github.com/Jean-Romain/lidR/issues/411)).
-- Fix: the LAScatalog processing engine printed the outputs twice for rare functions that print something like `las_check()`  ([#414](https://github.com/Jean-Romain/lidR/issues/414))
-- Fix: the internal way lidR is checking for nested parallelism has been reworked in depth fixing some bugs and allowing to support more strategies thanks to @Lenostatos  ([#418](https://github.com/Jean-Romain/lidR/issues/418), [#421](https://github.com/Jean-Romain/lidR/issues/421))
-- Fix: `merge_spatial()` did not work with `sf` objects.
-- New: `las_check()` introduces a new type of message called "message". Some message previously classified as "warning" are now classified as "message". Warnings are now displayed in orange and messages in yellow. The output of `las_check()` has now 3 items instead of 2.
-- New: `stdmetrics_z` gains a new parameter `zmin = 0` to control the lower bound of the integration for metrics `zpcumx` ([#424](https://github.com/Jean-Romain/lidR/issues/424)).
-- Enhance: `max_cr_factor` in `silva2019()` is now allowed to be in [0, inf[ instead of [0,1] ([#417](https://github.com/Jean-Romain/lidR/issues/417))
-- Enhance: added a workaround to avoid `sp` printing `proj_create: crs not found` for non recognized EPSG codes and avoid throwing warning `Discarded datum [...] in Proj4 definition`
-- Enhance: `readLAScatalog()` throws a more informative error when attempting to read an non-existing folder.
-- Enhance: `readXXXLAS()` now throws an error for `LAScluster` ([#430](https://github.com/Jean-Romain/lidR/issues/430)).
-- Doc: Updates and clarifications in the doc of `stdmetrics`.
-- Misc: removed `LazyData` in `DESCRIPTION`
+- Fix: CRAN stuff
 
-## lidR v3.1.2 (Release date: 2021-03-11)
+## lidR v4.3.1 (Release date: 2026-04)
 
-- New: the class `LASheader` has a new slot `@EVLR` for the extended variable length records. `print()` has been extended to display EVLR. While this change is compatible with `rlas <= 1.3.9` it is only used with version of `rlas >= 1.4.0`. 
-- New: algorithm `lowest()` for `decimate_points()`
-- Fix: usban outside the range of representable values of type 'char' for spatial indexes built with 0 point.
-- Fix: build failure with GCC 4.x
-- Fix: `catalog_apply()` now works with cluster plan `plan(cluster)` meaning that it can be used on HPC e.g. with MDPI. We took advantage of this bug to better detect the parallel strategy used and disable or not OpenMP. When `lidR` is not able to figure out if the strategy involves multiple machines or multiple cores of a single machine, then a warning is thrown and OpenMP is disabled by security.
-    ```
-    The parallel evaluation strategy was no recognized and lidR does not know if OpenMP should be disabled.
-    OpenMP has been disabled by security. 
-    Use options(lidR.check.nested.parallelism = FALSE) and set_lidr_threads() for a fine control of parallelism.
-    ```
-- Fix: incorrect offset computation in `spTransform()` have for consequences to make the function failing with error: `Non quantizable value outside the range of representable values of type 'int'`.
-- Fix: attribution of a WKT string with `projection()` when using an epsg code as input (`projection(las) <- 12345`).
-- Fix: partial processing mode now respects the raster alignment when processed by file
-- Fix: `readLAScatalog()` now reads the WKT CRS of LAS files format 1.4. To support both EPSG and WKT the table of attribute of a `LAScatalog` now has a column named `CRS` that replace former column `EPSG`.
-- Fix: `print()` for a `LAScatalog` now prints the CRS exactly like `print` for `LAS`.
-- Doc: documentation of `options(lidR.check.nested.parallelism = FALSE)` was missing. Information can now be found in `?lidR-package` and `?lidR-parallelism`
-- Enhance: in `catalog_apply()` if `lidR.check.nested.parallelism = FALSE` it now respects the input of `set_lidr_thread()` instead of the output of `get_lidr_threads()`. For example if `set_lidr_thread(0)` it now propagates the information 0 (all cores) instead of the output of `get_lidr_thread()` which might be e.g. 4 on the master worker but might be different on the slave workers. Similarly `set_lidr_thread(20)` will request 20 cores to the workers even if `get_lidr_thread()` returns 4 on the local machine.
-- Enhance: `set_lidr_thread()` accepts inputs < 1 such as 0.5 or 0.25 to mean 'half' or 'quarter' of available cores.
-- Enhance: `grid_density()` now returns 0 for pixels with 0 points instead of `NA` which make more sense and corresponds to what should be expected.
+- Fix: CRAN stuff
+- New: `point_metrics()` is back.
+- New: minor change in `readLAS()`, `readLASheader()`, `readLAScatalog()` to be ready to support remote files with `rlas` 1.9.0.
 
-## lidR v3.1.1 (Release date: 2021-01-22)
+## lidR v4.3.0 (Release date: 2026-04-02)
 
-- Fix usban issue: outside the range of representable values of type 'int' for spatial indexes built with 0 point.
-- Fix usban issue: outside the range of representable values of type 'int' when quantizing or counting non quantized values that are not quantizable according the the given scale and offset.
-- Remove lax files in example data.
+- New: Progressive TIN Densification for ground classification (`ptd()`)
+- New: Spike-free algorithm for CHM (`spikefree()`)
+- New: Locally Adaptive Spike-free algorithm for CHM (`lspikefree()`)
+- New: function `catalog_split_clusters()`
+- Doc: [lidR book](https://github.com/r-lidar/lidRbook) updated
 
-## lidR v3.1.0 (Release date: 2021-01-15)
 
-#### MAJOR NEW FEATURES
+## lidR v4.2.3 (Release date: 2026-01-07)
 
-The release of `lidR` 3.1.0 comes with major internal modifications enabling users to chose different kinds of spatial indexes to process the point-clouds, including Quadtrees and Octrees, plus others. Previous releases were optimized to process ALS data but were suboptimal for TLS data (for example) because the spatial index in use was specialized for ALS. With 3 new spatial indexes, version 3.1.0 brings the capability to process TLS (but not only) data more efficiently. For the time being, however, `lidR` is still mainly focused on ALS and does not include many functions for TLS processing, but the existing functions that be used on all kinds of point-cloud, such as `point_metrics()`, `detect_shape()`, and `classify_noise()` are already much faster for TLS data.
+- Fix #831 numerical accuracy issue in 3D grid partition.
+- Other CRAN issues
 
-1. The class `LAS` has a new slot `@index` that registers the source of the point cloud (e.g. ALS, TLS, UAV, DAP) and the spatial index that must be used (e.g. grid partition, voxel partition, quadtree, octree). See `help("lidR-spatial-index")`.
-2. This comes with several new `read*LAS()` functions, such as `readTLSLAS()`, which registers the point-cloud type and a default spatial index. Registering the correct point type improves the performance of some functions. This is particularly visible in functions that perform 3D knn searches, such as `point_metrics()`. Computing `point_metrics()` on a TLS point-cloud tagged as TLS is much faster than if it is not tagged. If performance is not improved in this release the future versions of the package may bring enhancements transparently.
-3. New functions `index()` and `sensor()` to manually modify the spatial indexing-related information. `help("lidR-spatial-index")`.
-4. New C++ API: the C++ classes for spatial indexing are header-only and stored in `inst/include`, meaning that other packages can link to `lidR` to uses the spatial index at C++ level. The classes are not documented yet but the source code is simple and commented, and the [lidR book](https://jean-romain.github.io/lidRbook/) contains (or will contain) a chapter on spatial indexing.
+## lidR v4.2.2 (Release date: 2025-11-04)
 
-#### CHANGES
+- Use `nanoflann` for knn computation. Numerous functions are faster.
+- Fix #824 `readLAScatalog` with a VPC files parse absolute paths with "/" instead of "\\" properly.
+- Fix #825 `plot()` with `color = "Classification"` is now as fast as plotting other attributes 
+- `connected_components()` gained an argument `connectivity`
 
-1. The use of old deprecated namespaces (such as `lassomething()`) now triggers a message inviting users to move on the new namespace.
-2. The construction of a `LAS` object with `LAS()` now triggers warnings with incorrectly quantized coordinates according to the information in the header.
-3. `grid_terrain()` now has a parameter `...` after `algorithm` that invalidates code that uses too many parameters without naming them. This no longer works:
+## lidR v4.2.1 (Release date: 2025-06-02)
+
+- Fix compilation on MacOS
+
+## lidR v4.2.0 (Release date: 2025-05-25)
+
+**v4.2.0 brings new tools for terrestrial data (TLS, MLS):**
+
+- New: Added the function `connected_components()` to perform clustering.
+- New: Introduced the function `knn_distance()` to measure the average distance between a point and its neighborhood.
+- New: Added a C++ spatial indexing class `SparsePartition3D` for TLS data, optimized for memory usage.
+- New: Introduced the functions `readALS()` and `readTLS()`, which replace the overly complex and rarely used `readALSLAS()`, `readTLSLAS()`, `readUAVLAS()`, and related functions.
+- New: `readLAS()` automatically detects if the point cloud is TLS or ALS. `readALS()` and `readTLS()` should be preferred in order to avoid false positive. The print function was updated to display what lidar type is registered.
+- New: Added the functions `readALScatalog()` and `readTLScatalog()` to replace the complex and less-used `readALSLAScatalog()`, `readTLSLAScatalog()`, `readUAVLAScatalog()`, and related functions. `readLAScatalog()` also detects if the point cloud is TLS or ALS.
+- New: Added the function `fit_circle()` using a RANSAC-based approach.
+- New: Added the function `height_above_ground()`
+- New: Added function `remove_noise()`
+- New: Added function `add_circle3d()`
+- New: Added fast function `knn()` and `knnx()` for point clouds.
+- New: Added algorithms `barycenter_per_voxel()`, `lowest_attribute_per_voxel()` and `highest_attribute_per_voxel()` for `decimate_points()`
+- Fix: Resolved issue #771 to allow reading VPC files with absolute paths.
+- Enhance: Improved the `crs()`, `is.empty()`, and `area()` functions, which now inherit from `terra`, avoiding conflicts with `terra`.
+- Enhance: Addressed issue #776 to allow `readLAScatalog()` to skip corrupted files.
+- Enhance: Optimized performance for many operations on TLS data.
+- Fix: #789 `homogenize()`
+- Fix: #800 reading VPC files with relative and absolute paths
+- Fix: `pitfill_stonge2008` was bugged with non square rasters du to rows-columns inversion
+
+## lidR v4.1.2 (Release date: 2024-07-09)
+
+- Fix: Significantly improved arithmetic accuracy in `point_in_triangle()` to enhance the quality of Delaunay triangulation interpolations and prevent local NAs.
+- Enhance: The `decimate_points()` function with the `random()` method now preserves the original point order.
+- Fix: Resolved issue #757.
+- Fix: Corrected the `random_per_voxel` algorithm, which was previously not functioning as intended.
+- Fix: Resolved an issue in `readLAScatalog()` when `sp` was missing.
+- Internal: Removed the dependency on `boost` for `point_in_polygon()` (issue #763).
+- Breaking change: Temporarily removed the `point_metrics()` function due to CRAN policy changes that no longer permit the use of some internal functions critical to this function (issue #764).
+
+
+## lidR v4.1.1 (Release date: 2024-02-03)
+
+- Fix: `readLAScatalog()` was not working if package `raster` was not installed.
+- Fix: regression of the `stars` package makes `rasterize_terrain()` extremely slow and blow up the RAM memory
+- New: `catalog_intersects()` support a `SpatExtent`
+- Fix: `lidR` can fully works without `raster` ans `sp`
+- Fix: [#742](https://github.com/r-lidar/lidR/discussions/742)
+- Fix: local maximum filter `lmf()` with a fixed windows is now 20 times faster.
+
+## lidR v4.1.0 (Release date: 2024-01-31)
+
+### NEW features
+
+1. New: `point_eigenvalues` gained an argument `coeff` to return the principal component coefficients
+2. New function `pitfill_stonge2008()`. See references.
+3. New `readLAScatalog` can read a virtual point cloud file (.vpc)
+
+### Backward incompatibilities
+
+Following the retirement of `rgdal` and `sp` we removed the dependence to `sp` and the strong dependence to `raster`:
+
+1. Change: remove function `bbox` inherited from `sp`
+2. Change: package `raster` is now only suggested and `lidR` no longer depends on it. 
+3. Change: the function `extent` was removed in consequence of (3) because it was inherited from `raster` and returned an object `Extent` from `raster`.
+4. Change: functions `crs`, `crs<-`, `projection`, `projection<-`, `wkt` and `area` inherited from `raster` are now generic. This may create clash with the `raster` package but anyway `raster` should no longer be used.
+
+### Fixes
+
+- Fix: [#728](https://github.com/r-lidar/lidR/issues/728) fix clipping polygons when polygons overlap.
+- Fix: [#726](https://github.com/r-lidar/lidR/issues/726) character palette causes error in plot.
+- Fix: [#732](https://github.com/r-lidar/lidR/issues/732) octree spatial indexes is not working properly. lidR now use voxel partition and no longer support octree until the problem is fixed.
+
+## lidR v4.0.4 (Release date: 2023-09-07)
+
+- Fix: interpolation of NA pixels failed when a single pixel is missing [#684](https://github.com/r-lidar/lidR/issues/684)
+- Fix: [#694](https://github.com/r-lidar/lidR/issues/594) `silva2016` can load (not too big) ondisk chm on the fly.
+- Fix: [#690](https://github.com/r-lidar/lidR/issues/690) `rasterize_terrain()` works in parallel with `res = <SpatRaster>`.
+- Fix: [#689](https://github.com/r-lidar/lidR/issues/689) attributes are not renamed when filtering a point cloud.
+- New: [#680](https://github.com/r-lidar/lidR/issues/680) it is now possible to use `plot(las, mapview = TRUE)`.
+- Fix: [#702](https://github.com/r-lidar/lidR/issues/702) `plot(las, breaks = <vector>)` now works with a vector of custom break points.
+- Fix: [#701](https://github.com/r-lidar/lidR/issues/701) `crown_metrics` now always remove invalid polygons if any.
+- Fix: [#708](https://github.com/r-lidar/lidR/issues/708) files read with `readMSLAS` can now be written properly with `writeLAS`.
+- New: `readMSLAS` accepts only two files.
+- Fix: `readMSLAS` converts `ScanAngleRank` to `ScanAngle`.
+
+## lidR v4.0.3 (Release date: 2023-03-09)
+
+- Add a function `add_lasnir()`.
+- Replace `rgl::rgl.*` by `rgl::*3d` functions [#651](https://github.com/r-lidar/lidR/issues/651)
+- Fix: `readLAS` no longer checks for attribute names validity as they are necessarily correct [#659](https://github.com/r-lidar/lidR/issues/659)
+- Fix: `plot_metrics()` no longer fails with a single plot [#664](https://github.com/r-lidar/lidR/issues/664)
+
+## lidR v4.0.2 (Release date: 2022-11-28)
+
+- Fix: [#638](https://github.com/r-lidar/lidR/issues/638). `unormalize_height()` removes extra_bytes in VLR.
+- Fix: [#637](https://github.com/r-lidar/lidR/issues/637). `print(las)` works even when the CRS is not recognized by `sf`.
+- New: `dsmtin` and `pitfree` gain an argument `highest`. This option was enabled by default in previous releases. There is now an option to disable it.
+- Fix: [#580](https://github.com/r-lidar/lidR/issues/580) and [#622](https://github.com/r-lidar/lidR/issues/622)  `normalize_height()` and `segment_trees` work in parallel with `SpatRaster`.
+- Fix: [#586](https://github.com/r-lidar/lidR/issues/586).
+- Fix: [#587](https://github.com/r-lidar/lidR/issues/587). `crown_metrics()` now triggers a warning when invalid geometries are created and `delineate_crowns()` remove these geometries before to convert to `sp`.
+- Fix: [#594](https://github.com/r-lidar/lidR/issues/594). `crown_metrics()` now works with `func = NULL` and a `LAScatalog`.
+- Fix: [#608](https://github.com/r-lidar/lidR/issues/608). The C++ function used to compute the range between a point and the sensor from the sensor positions was re-based to resolve a bug when a single sensor position was found for a given flightline. New warnings were added.
+- Fix: [#609](https://github.com/r-lidar/lidR/issues/609). `*_metrics()` functions always returned `NA`s for `lastofmany`.
+- Fix: [#614](https://github.com/r-lidar/lidR/issues/614). Manual tree detection preserves the CRS.
+- Doc: `dalponte2016` doc updated to use `terra`.
+
+## lidR v4.0.1 (Release date: 2022-05-03)
+
+- Fix: `plot(ctg, chunk = TRUE)` does not fail if an invalid output file template is registered [#537](https://github.com/r-lidar/lidR/issues/537)
+- Enhance: `locate_trees()` throws an informative error if called with an on-disk raster. The former error was cryptic. If the raster is small enough it is loaded on-the-fly.
+- Fix: `merge_spatial()` with RGB and `SpatRaster` was not working properly [#545](https://github.com/r-lidar/lidR/issues/545)
+- Enhance: `st_area()` better estimates the area of small point-clouds and is faster
+- Fix: [#548](https://github.com/r-lidar/lidR/issues/548)
+- Enhance: Scale factors are better estimated in `interpret_waveform`  [#549](https://github.com/r-lidar/lidR/issues/549). 
+- Fix: `plot_metrics()` returns NA if 0 points available [#551](https://github.com/r-lidar/lidR/issues/551).
+- Fix: floating point accuracy error with `rasterize_canopy` may generate error or messed-up CHM [#552](https://github.com/r-lidar/lidR/issues/552).
+- Fix: `print()` and `st_area()` were not working for point cloud with no CRS
+- Fix: `track_sensor()` does not fail with a `LAScatalog` when no sensor position is found. It also triggers a warning. [#556](https://github.com/r-lidar/lidR/issues/556).
+- Fix: The LAScatalog processing engine works with a single file [#558](https://github.com/r-lidar/lidR/issues/558).
+- Fix: `rasterize_terrain()` now works with a `LAScatalog` and `shape = sfc_object` [#558](https://github.com/r-lidar/lidR/issues/558).
+- Fix: `catalog_retile()` now works when some tiles are empty [#563](https://github.com/r-lidar/lidR/issues/563).
+- Fix: `crown_metrics()` messed up tree IDs with a hull geometry [#554](https://github.com/r-lidar/lidR/issues/554).
+- Fix: `merge_spatial()` crops large vectors to the extent of the point cloud before to perform the merge. This has for consequences to sometime transform polygons into multipolygons. When polygons and multipolygons were mixed the functions stopped with an error. It now works.
+- Fix: `normalize_height()` now sets the Z offset to 0 [#571](https://github.com/r-lidar/lidR/issues/571).
+- Fix: smaller rasters stored on-disk are better handled and loaded if needed
+
+### Changes related to rlas 1.6.0
+
+We are currently developing rlas 1.6.0 that uses the ALTREP framework to load compact representation of non populated attributes. For example `UserData` is usually populated with zeros (not populated). Yet it takes 32 bits per point to store each 0. With rlas 1.6.0 it will only uses 644 bits no matter the number of points loaded for non populated attributes. This applies to each attribute populated with a single repeated value. This allows for saving approximately 30% of memory usage depending on the number of non-populated attributes that are present in the file. rlas 1.6.0 is compatible will all versions of lidR but lidR 4.0.1 introduced some internal optimization, internal fixes and new functions to fully take advantage of rlas 1.6.0. lidR v<= 4.0.0 will work with rlas 1.6.0 but won't take advantage of the new compression feature.
+
+1. the function `LAS()` no longer call `data.table::setDT()` if the input is already a `data.table`. Indeed `data.table::setDT()` materializes the compressed ALTREP vectors and this is not what we want. One consequence of this change is that `readLAS()` now preserve the ALTREPness (i.e. the compression) of the output of `rlas::read.las()`.
+
+2. Subsetting a `LAS` object no longer call `data.table` native subset. We previously used something like `las@data[indx]` to subset the point cloud. Sadly `data.table` tries to materialized the ALTREPed vector whenever it can. We implemented internally a `smart_subset()` function that subset and preserves the compression of the vectors. One consequence of such change is that all `filter_*()` and `clip_*()` functions preserve the compression of the point-cloud if any.
+
+3. `las_check()` has been slightly modified to ensure it does not materialize ALTREPed object. One side effect of `las_check()` was to decompress the point cloud unexpectedly. Such a pity! We also change `las_check()` to print information about the compression.
+
+4. We changed the way `*_metrics()` functions evaluates the user defined expression because we found that it had the side effect of materializing all the attributes instead of materializing only those needed. For example `pixel_metrics(las, mean(Z))` only needs the attribute Z. No need to allocate and copy memory for `Intensity`, `ScanAngle` and so on. In previous version all attributes where inspected with the side effect to materialize all compressed vectors. The `*_metrics()` functions now properly detect which attributes are actually necessary for the evaluation of `func`. Two consequences:  (1)`*_metrics()` functions are 20 to 40% faster, (2) the compression is preserved if no compressed attribute is used in the evaluation and e.g. `pixel_metrics(las, mean(UserData))` uncompresses only `UserData`.
+
+5. New functions `las_is_compressed()` that tells which attributes are compressed and `las_size()` that returns the true size of a `LAS` objects taking into account the compression. `las_size()` should returns something similar to `pryr::object_size()` but different to `object.size()` that is not ALTREP aware. We also changed the `print` function so it uses `las_size()` instead of `object.size()`.
+
+On overall lidR's functions are expected to almost never decompress a LAS object. However other R packages and R functions may do it. For example `data.table::print` do materializes the ALTREP vectors. `base::range()` too but not `base::mean()` or `base::var()`.
+
 ```r
-grid_terrain(las, 1, tin(), TRUE, TRUE, 8)
-# Use instead
-grid_terrain(las, 1, tin(), keep_lowest = TRUE, full_raster = TRUE, use_class = 8)
+las@data                    # Full decompression (print data.table)
+range(las$Userdata)         # Decompression of UserData
+las@data[2, UserData := 1]  # Decompression of UserData
+las@data[1:10]              # Full decompression
 ```
-4. `opt_cores()` and `opt_cores<-()` are now defunct. These functions did not have any effect because they only throw a warning to alert about deprecation since v2.1.0 (July 2019).
-5.  The `LAS*` classes have a new slot `@index` (see above). This should not break anything expect when a `LAS*` object is saved in an `Rds` file and loaded as an R object instead of being read with `readLAS`.
- 
-#### NEW FEATURES
 
-1. `classify_noise()`
-    - New function `classify_noise()` to classify the outliers of a point-cloud according to ASPRS standard
-    - New algorithm `sor()` (statistical outlier removal) for noise classification
-    - New algorithm `ivf()` (isolated voxel filter) for noise classification
+## lidR v4.0.0 (Release date: 2022-02-17)
 
-2. Quantization of the coordinates. `LAS` objects in `lidR` closely respect the ASPRS standard. When modified manually by users, some inadequate practices may generate invalid LAS objects. We thus decided to export some internal functions to help in creating valid LAS objects and we modified the behavior of the `[[<-` and `$<-` operators to ensure that it is more difficult to create `LAS` objects that are not ASPRS compliant.
-    - New functions `las_quantize()`, `quantize()`, `is.quantized()`, `count_not_quantized()` to ensure that coordinates are quantized according to the metadata in the header.
-    - New function `las_update()` to update the header (bounding box, number of points, return count and so on) if a LAS object was modified outside a `lidR` functions.
-    - Enhanced behaviour of `[[<-` and `$<-` operators. Values are quantized on-the-fly and the header is updated automatically when attributing new values to `X`, `Y` or `Z`.
+`rgdal` and `rgeos` will be retired on Jan 1st 2024. see twitter (https://twitter.com/RogerBivand/status/1407705212538822656), [youtube](https://www.youtube.com/watch?v=cK08bxUJn5A), or see the respective package descriptions on CRAN. Packages `raster` and `sp` are based on `rgdal`/`rgeos` and `lidR` was based on `raster` and `sp` because it was created before `sf`, `terra` and `stars`. This means that sooner or later `lidR` will run into trouble (actually it is more or less already the case). Consequently, we modernized `lidR` by moving to `sf`, `terra`/`stars` and we are no longer depending on `sp` and `raster` (see also [Older R Spatial Package](https://r-spatial.org/r/2022/04/12/evolution.html) for more insight). It is time for everybody to stop using `sp` and `raster` and to embrace `sf` and `stars/terra`.
+
+In version 4 `lidR` now no longer uses `sp`, it uses `sf` and it no longer uses `raster`. It is now raster agnostic and works transparently with rasters from `raster`, `terra` and `stars`. These two changes meant we had to rewrite a large portion of the code base, which implies few backward incompatibilities. The backward incompatibilities are very small compared to the huge internal changes we implemented in the foundations of the code and should not even be visible for most users.
+
+### Backward inconpatibilites
+
+1. `lidR` no longer loads `raster` and `sp`. To manipulate `Raster*` and `Spatial*` objects returned by lidR users need to load `sp` and `raster` with:
     ```r
-    las$X # Original values
-    #> [1] 0.755 0.286 0.100 0.954 0.416 0.455 0.971 0.584 0.962 0.762
-    las$X + 5/3 # Many decimals because 5/3 = 1.666666...
-    #> [1] 2.421667 1.952667 1.766667 2.620667 2.082667 2.121667 2.637667 2.250667 2.628667 2.428667
-    las$X <- las$X + 5/3 # Updates X with these numbers
-    las$X # Values were quantized (and header updated)
-    #> [1] 2.422 1.953 1.767 2.621 2.083 2.122 2.638 2.251 2.629 2.429
+    library(sp)
+    library(raster)
+    library(lidR)
     ```
-    - New manual page can be found in `help("las_utilities")`.
+
+2. The formal class `LAS` no longer inherits the class `Spatial` from `sp`. It means, among other things, that a `LAS` object no longer has a slot `@proj4string` with a `CRS` from `sp`, or a slot `@bbox`. The CRS is now stored in the slot `@crs` in a `crs` object from `sf`. Former functions `crs()` and `projection()` inherited from `raster` are backward compatible and return a `CRS` or a `proj4string` from `sp`. However code that accesses these slots manually are no longer valid (but nobody was supposed to do that anyway because it was the purpose of the function `projection()`):
+    ```r
+    las@proj4string # No longer works
+    las@bbox        # No longer works
+    inherits(las, "Spatial") # Now returns FALSE
+    ```
+
+3. The formal class `LAScatalog` no longer inherits the class `SpatialPolygonDataFrame` from `sp`. It means, among other things, that a `LAScatalog` object no longer has a slot `@proj4string`, or `@bbox`, or `@polygons`. The slot `@data` is preserved and contains an `sf,data.frame` instead of a `data.frame` allowing backward compatibility of data access to be maintained. The syntax `ctg$attribute` is the way to access data, but statement like `ctg@data$attribute` are backward compatible. However, code that accesses other slots manually is no longer valid, like for the `LAS` class:
+    ```r
+    ctg@proj4string # No longer works
+    ctg@bbox        # No longer works
+    ctg@polygons    # No longer works
+    inherits(ctg, "Spatial") # Now returns FALSE
+    ```
+
+4. `sp::spplot()` no longer works on a `LAScatalog` because a `LAScatalog` is no longer a `SpatialPolygonDataFrame`
+    ```r
+    spplot(ctg, "Max.Z")
+    # becomes
+    plot(ctg["Max.Z"])
+    ```
     
-3. metrics
-    - `voxel_metrics()` gained a parameter `all_voxels` to include "empty" voxels (i.e. those with 0 points) in the output [#375](https://github.com/Jean-Romain/lidR/issues/375).
-    
-4. `grid_terrain()`
-    - new parameter `...` after `algorithm` that invalidates code that uses too many parameters without naming them. This no longer works:
-    ```r
-    grid_terrain(las, 1, tin(), TRUE, TRUE, 8)
-    # Use instead
-    grid_terrain(las, 1, tin(), keep_lowest = TRUE, full_raster = TRUE, use_class = 8)
-    ```
-    - new parameter `is_concave` to compute a nicer DTM if the point-cloud boundaries are not convex [#374](https://github.com/Jean-Romain/lidR/issues/374)
-     
-### FIXES
-
-1. In `clip_transect()` the polygon generated to extract the transect defined by points `p1`, `p2` was created by buffering the line `p1-p2` with a `SQUARE` cap style meaning that the transect was extended beyond points `p1`, `p2`. It now uses a `FLAT` cap style meaning that the transect is no longer extended beyond the limits of the user input.
-2. In `segment_trees()` when using a raster-based algorithm, some points may have been misclassified as NAs at the edges of the point cloud instead of getting the correct tree ID found in the raster because of some edge effects. Now, all points are correctly classified and there are no longer false positive NAs.
-3. `normalize_intensity()` was previously not working with a `LAScatalog`. Now fixed. See [#388](https://github.com/Jean-Romain/lidR/issues/388)
-4. In `grid_*()` functions when a `RasterLayer` is given as layout, the computation was performed for all the cells no matter if the extent of the loaded point-cloud was much smaller than the raster. For large rasters this dramatically increased the workload with redundant computation and saturated the RAM to a point that the computation was no longer possible. 
-5. In `track_sensor()` pulse IDs could be wrongly attributed for multi-beam sensors if the number of points is very low. See [#392](https://github.com/Jean-Romain/lidR/issues/392)
-6. In `track_sensor()`, if `thin_pulses_with_time = 0` a single pulse was loaded with a `LAScatalog`. However it worked as expected with a `LAS` object. This behavior has been fixed.
-7. Fixed some new warnings coming from `future` and related to RNG.
-8. `clip_*()` in a region with no points from a `LAScatalog` + an output file no longer fails. See [#400](https://github.com/Jean-Romain/lidR/issues/400).
-
-### ENHANCEMENTS
-
-* Doc: The documentation of `point_metrics()` clarifies how the user-defined function is fed and in which order the points are sorted.
-* Doc: The argument `Wdegenerated` in `grid_terrain()` and `normalize_height()` was misleading. A wrong interpretation was that degenerated ground points were discarded from the dataset. The documentation now clarifies the text to avoid misinterpretation.
-* Doc: minor fixes and clarifications in the `LAScatalog-class` page of the manual.
-* Enhance: `plot_dtm3d()` now enables pan by default, like `plot()` for `LAS` objects.
-* Enhance: `track_sensor()` throws a new warning if a swath in the point cloud does not produce any sensor location. This addresses [#391](https://github.com/Jean-Romain/lidR/issues/391).
-* Misc: switch to C++14 (see [#402](https://github.com/Jean-Romain/lidR/issues/402))
-
-## lidR v3.0.4 (Release date: 2020-10-08)
-
-* Fix: in `readLAScatalog()` the documentation states that `...` is propagated to `list.files()`, but the argument `pattern` was actually hard coded internally and this prevents it being overwritten. When using `readLAScatalog(..., pattern = "xxx")` this previously triggered an error, `formal argument "pattern" matched by multiple actual arguments`. It now works. See [#368](https://github.com/Jean-Romain/lidR/issues/368).
-* Fix: in `spTransform()` the reprojected point cloud now has quantized coordinates and is thus LAS compliant [#369](https://github.com/Jean-Romain/lidR/issues/369).
-* Fix: The local maximum filter algorithm more robustly finds local maxima when two or more close points or pixels share the exact same height and are both locally the highest. Previously, if two or more points in a close neighbourhood were both the highest, they may all be missed depending on the order they were processed (which is somewhat random). The fix allows users to retain one local maximum among multiple ones with a precedence to the first one identified as local maximum. The consequences of this fix are that slightly more apices may be found, especially when processing a CHM in `RasterLayer`.
-* Fix: `classify_ground()` no longer erases the previous classification when no ground points were recorded but some points are classified with other classes.
-* Fix [#365](https://github.com/Jean-Romain/lidR/issues/365). Poor interpolation at the very edge of the Delaunay triangulation in some cases. Triangles with too steep a slope are now removed. This triggers a knnidw interpolation instead.
-* Fix [#371](https://github.com/Jean-Romain/lidR/issues/371): `las_reoffset()` may not have caught extremely rare Z coordinate overflow when converting to integers.
-* Fix [#372](https://github.com/Jean-Romain/lidR/issues/372). `las_reoffset()` incorrectly converted decimal coordinates to integers using `trunc` instead of `round`.
-* Fix: `projection<-()` and `crs<-()` properly attributes `NA` CRS for LAS 1.4 objects
-* Change: in `print` the CRS of `LAS` and `LAScatalog` is no longer displayed as a proj4 string but uses the WTK string with `sf` style display. E.g. `NAD83 / UTM zone 17N` is displayed instead of `+proj=utm +zone=17 +datum=NAD83 +units=m +no_defs`. This is part of the migration toward WTK instead of proj4.
-* Change: `lidR` now explicitly depends on `rgdal >= 1.5.8`.
-* Change: `grid_canopy()` now rounds the values of the pixels for not outputing pixels that with an irrelevant number of decimal digits.
-* Enhance: `epsg()` now throws a warning if the LAS is in format 1.4 and CRS is stored as WKT.
-* New: `projection()<-` supports `crs` from `sf` and numeric values for espg code: `projection(las) <- 26918`.
-* New: in `spTransform()` it is now possible to use a parameter `scale` to change the scale factor after reprojection. This is useful for projecting from lon-lat data `las2 = spTransform(las, crs, scale = 0.01)`.
-* Internal: better support in `projection<-` of the current changes with CRS representation in the R spatial ecosystem.
-* Doc: new CITATION file. `citation("lidR")`
-
-## lidR v3.0.3 (Release date: 2020-08-05)
-
-* New: `tin()` gains a parameter `extrapolate` to control how the method treats interpolation of points outside the convex hull determined by ground points. This solves [#356](https://github.com/Jean-Romain/lidR/issues/356) 
-* Doc: supported processing options in `grid_terrain()` were incorrect especially the buffer that *is* required. 
-* Doc: in `Wing2015()` the mention about weak performance was removed since it was not longer true for a while.
-* Doc: clarification of the supported templates in man page named `clip`
-* Enhance: a more informative error is thrown when using `{ORIGINALFILENAME}` as a template in `clip_*()`.
-* Misc: fix C++ error that will happen in next version of `Rcpp` ahead of the release of `Rcpp`. Thanks to @waltersom in [#358](https://github.com/Jean-Romain/lidR/pull/358)
-
-## lidR v3.0.2 (Release date: 2020-07-05)
-
-* Fix: in `grid_metrics()` and `grid_canopy()` when processing a `LAScatalog` the option to process by files without buffer and disabling the wall-to-wall guarantees (processing independant filles) is now repected. [See also](https://gis.stackexchange.com/questions/365686/how-to-exclude-bounding-boxes-of-plots-in-lascatalog). 
-* Fix: in `grid_metrics()` NA pixels were zeroed. They are now properly initialized to NA.
-
-## lidR v3.0.1 (Release date: 2020-06-18)
-
-* Fix: in `grid_terrain()` and `normalize_height()` we introduced few releases ago an option `use_class` but we did not removed an internal test consisting in failling in absance of point classified 2. This invalidated the possibility to use e.g. `use_class = 1` in files that do not respect ASPRS standards [#350](https://github.com/Jean-Romain/lidR/issues/350).
-* Fix: many troubles introduced in v3.0.0 on CRAN
-* Fix: package explicitly depends on sp >= 1.4.2
-* Fix: `readLAS(filter = "-help")` was not working but was suggested in the documentation.
-
-## lidR v3.0.0 (Release date: 2020-06-08)
-
-#### MAJOR CHANGES
-
-**Summary** 
-
-In lidR version 3.0.0, 80% of the functions were renamed. Old functions were soft-deprecated, meaning that they still exist so version 3 is fully compatible with version 2, at least for 1 year. Users should start to use the new names. See `?lidR::deprecated` for the list of deprecated functions and their new names. The plan is to remove these functions in 1 year so they will progressively print a message, then throw a warning, then throw an error, after which they will be definitively removed.
-
-**Full explanation**
-
-At the very beginning of the development of lidR we started to name the functions that return a LAS object `lassomething()`. At that point there were 5 functions and ~10 users. As lidR grew up, we kept going with this naming convention but now lidR is used worldwide and this naming convention now overlaps with the LAStools software suite created by Martin Isenburg. This creates confusion for users which is problematic both for Martin and for us. This situation is likely to get worse as more tools are released into LAStools. We discussed the issue with Martin Isenburg and we took the decision to rename the functions in the lidR package so that the overlaps in namespace will progressively disappear.
-
-The new naming convention follows the currently trending `verb_noun` syntax initiated by the `tidyverse`. For example, `lasnormalize()` becomes `normalize_height()`, while `lasground()` becomes `classify_ground()`. The full list of changes can be found in `?lidR::deprecated`.
-
-In efforts to avoid breaking users' scripts version 3 is fully backwards-compatible. For example, the function `lasground()` still exists and can be used without throwing a warning or error message. But this will progressively change with versions 3.1.0, 3.2.0 and 3.3.0. First a message will be displayed to invite users to change to using the new names, then a warning, then finally an error. After a year, maybe 18 months, the function will no longer exist. So users are invited to adopt the new naming convention as soon as possible.
-
-#### NEW FEATURES
-
-1. `readLAScatalog()` has new parameters to tune the processing options at read time without using the functions `opt_*()`.
+5. `raster::projection()` no longer works on `LAS*` objects because they no longer inherit `Spatial`. Moreover, `lidR` no longer `Depends` on `raster` which means that `raster::projection()` and `lidR::projection` can mask each other. Users should use `st_crs()` preferentially. To use `projection` users can either load `raster` before `lidR` or call `lidR::projection()` with the explicit namespace.
 
     ```r
-    readLAScatalog("folder/", chunk_buffer = 60, filter = "-drop_z_below 2")
+    library(lidR)
+    projection(las) # works
+    library(raster)
+    projection(las) # no longer works
     ```
 
-2. New function `clip_transect()` to extract a transect between two points. The function has the capability to reorient the point cloud to put it on XZ coordinates and easily create some 2D rendering of the transects in e.g. `ggplot2.`
-
-3. New function `readMSLAS()` to read multisprectral data from 3 different files.
-
+6. Serialized `LAS/LAScatalog` objects (i.e. stored in `.rds` or `.Rdata` files) saved with `lidR v3.x.y` are no longer compatible with `lidR v4.x.y`. Indeed, the structure of a `LAS/LAScatalog` object is now different mainly because the slot `@crs` replaces the slot `@proj4string`. Users may get errors when using e.g. `readRDS(las.rds)` to load back an R object. However we put safeguards in place so, in practice, it should be backward compatible transparently, and even repaired automatically in some circumstances. Consequently we are not sure it is a backward incompatibility because we handled and fixed all warnings and errors we found. In the worst case it is possible to repair a `LAS` object v3 with:
     ```r
-    readMSLAS("channel1.las", "channel2.las", "channel3.las", filter = "-keep_first")
+    las <- LAS(las)
     ```
 
-4. `delineate_crowns()` (formerly named `tree_hulls()`) now returns 3 metrics: `XTOP`, `YTOP` and `ZTOP`, that contain the coordinates of the apices of the trees.
+7. `track_sensor()` is not backward compatible because it is a very specific function used by probably just 10 people in the world. We chose not to rename it. It now returns an `sf` object instead of a `SpatialPointsDataFrame`.
 
-5. `segment_trees()` (formerly named `lastrees()`) and `find_trees()` (formerly `tree_detection()`) can now perform the computation on a `LAScatalog` using two strategies to ensure that tree IDs are always unique on a coverage and that trees that belong on the edge of two tiles will independently get the same IDs.
+### New modern functions
 
-6. `point_metrics()` 
-    - supports a knn neighborhood search with missing `r` and given `k`
-    - supports a spherical neighborhood search with missing `k` and given `r`
-    - supports a knn neighborhood + a radius limit with `k` and `r` given
-    - default setting is now `xyz = FALSE`
-    - if `xyz = FALSE` the the output now contains a column (the first one) named `pointID` that references the point of the original las object. See [#325](https://github.com/Jean-Romain/lidR/issues/325)
+Former functions that return `Spatial*` objects from package `sp` should no longer be used. It is time for everybody to embrace `sf`. However, these functions are still in `lidR` for backward compatibility. They won't be removed except if package `sp` is removed from CRAN. It might happen on Jan 1st 2024, it might happen later. We do not know. New functions return `sf` or `sfc` objects. Old functions are not documented so new users won't be able to use them.
 
-7. `normalize_height()` (formerly named `lasnormalize()`)
-    - new argument `add_lasattribute`. If `TRUE` the absolute elevation (above sea level) is retained as before, but the header is updated so the absolute elevation becomes an extrabyte attribute writable on a las file. Otherwise the information is discarded at write time.
-    - new argument `Wdegenerated`. If `FALSE` the function does not warn about degenerated points. Degenerated points are removed anyway.
+- `tree_metrics()` and `delineate_crowns()` are replaced by a single function `crown_metrics()` that has the same functionality, and more.
+- `find_trees()` is replaced by `locate_trees()`.
 
-8. New function `find_localmaxima()` to find local maxima with different windows. This function is designed for programming purposes, not to find individual trees. This latter task is still performed by `find_trees()` (formerly called `tree_detection()`). Instead, `find_localmaxima()` may help with finding other human-made structures.
+Older functions that return `Raster*` objects from the `raster` package should no longer be used. It is time for everybody to embrace `terra/stars`. However, these functions are still in `lidR` for backward compatibility.  They won't be removed except if package `raster` is removed from CRAN. New functions return either a `Raster*`, a `SpatRaster`, or a `stars` object, according to user preference.
 
-9. Internal global variables were exported to help with ASPRS LAS classification standard. Instead of remembering the classification table of the specification it is now possible to use one of `LASNONCLASSIFIED`, `LASUNCLASSIFIED`, `LASGROUND`, `LASLOWVEGETATION`, `LASMEDIUMVEGETATION`, `LASHIGHVEGETATION`, `LASBUILDING`, `LASLOWPOINT`, `LASKEYPOINT`, `LASWATER`, `LASRAIL`, `LASROADSURFACE`, `LASWIREGUARD`, `LASWIRECONDUCTOR`, `LASTRANSMISSIONTOWER`, `LASBRIGDE`, `LASNOISE`. e.g.:
+- `grid_metrics()` is replaced by `pixel_metrics()`
+- `grid_terrain()`, `grid_canopy()`, `grid_density()` are replaced by `rasterize_terrain()`, `rasterize_canopy()`, `rasterize_density()` 
 
+### New features
+
+New functions are mostly convenient features that simplify some workflow aspects without introducing a lot of brand new functionality that did not already exist in `lidR` v3.
+
+1. New geometry functions `st_convex_hull()` and `st_concave_hull()` that return `sfc`
+
+2. New modern functions `st_area()`, `st_bbox()`, `st_transform()` and `st_crs()` inherited from `sf` for `LAS*` objects.
+
+3. New convenient functions `nrow()`, `ncol()`, `dim()`, `names()` inherited from `base` for `LAS*` objects
+
+4. New operators `$`,  `[[`, `$<-` and `[[<-` on `LASheader`. The following are now valid statements:
     ```r
-    filter_poi(las, !Classification %in% c(LASWIRECONDUCTOR, LASTRANSMISSIONTOWER))
+    header[["Version Major"]]
+    header[["Z scale factor"]] <- 0.001
     ```
 
-10. The internal function `catalog_makechunks()` has been exported. It is not actually intended to be used by regular users but might be useful in some specifc cases for debugging purposes.
-
-11. `lasmetrics()`, `grid_metrics3d()`, `grid_hexametrics()` were deprecated in previous versions. They are now defunct.
-
-12. `las_check()` (formerly named `lascheck()`):
-    - gains an option `print = FALSE`. 
-    - now returns a `list` for further automatic processing/parsing. If `print = TRUE` the list is returned invisibly so the former behavior looks the same.
+5. Operators  `$`,  `[[`, `$<-` and `[[<-` on `LAS` can now access the `LASheader` metadata. The following are now valid statements:
     ```r
-    las_check(las, FALSE)
-    #> $warnings
-    #> [1] "1 points are duplicated and share XYZ coordinates with other points"                                         
-    #> [2] "There were 1 degenerated ground points. Some X Y Z coordinates were repeated."                               
-    #> [3] "There were 1 degenerated ground points. Some X Y coordinates were repeated but with different Z coordinates."
-    #> 
-    #> $errors
-    #> [1] "Invalid header: X scale factors should be factor ten of 0.1 or 0.5 or 0.25 not 0.123"                      
-    #> [2] "Invalid file: the data contains a 'gpstime' attribute but point data format is not set to 1, 3, 6, 7 or 8."
+    las[["Version Major"]]
+    las[["Z scale factor"]] <- 0.001
     ```
-    - gains an option `deep = TRUE` with a `LAScatalog` only. In this case it performs a deep inspection of each file reading each point cloud.
-    - the coordinates of the points are expected to be given with a resolution e.g. 0.01 meaning a centimetre accuracy. It means we are expecting values like 12345.67 and not like 12345.6712. This is always the case when read from a LAS file but users (or lidR itself) may transform the point cloud and generate LAS objects where this rule is no longer respected. `lidR` always ensures to return `LAS` objects that are stricly valid with respect to ASPRS standard. If not valid this may lead to failure in `lidR` because some functions, such as `tin()`, `dsmtin()`, `pitfree()` work with the integer representation of the coordinates. This is why we introduced a quantization check in `las_check()`.
-    - now reports problems for invalid data reported in [#327](https://github.com/Jean-Romain/lidR/issues/327)
-    
-13. `merge_spatial()` (formerly named `lasmergespatial()`) now supports `sf` POLYGON objects.
 
-14. `plot()` 
-    - for LAS object gains an argument `add` to overprint two point clouds with e.g. different color palettes [#325](https://github.com/Jean-Romain/lidR/issues/325).
+6. RStudio now supports auto completion for operator `$` in `LAS` objects. Yay!
+
+7. New functions `template_metrics()`, `hexagon_metrics()`, `polygon_metrics()` that extend the concept of metrics further to any kind of template.
+
+8. Functions that used to accept spatial vector or spatial raster as input now consistently accept any of `Spatial*`, `sf`, `sfc`, `Raster*`, `SpatRaster` and `stars` objects. This include `merge_spatial()`, `normalize_intensity()`, `normalize_height()`, `rasterize_*()`, `segment_trees()`, `plot_dtm3d()` and several others. We plan to support `SpatVector` in future releases.
+
+9. Every function that supports a raster as input now accept an "on-disk" raster from `raster`, `terra` and `stars` i.e. a raster not loaded in memory. This includes rasterization functions, individual tree segmentation functions, `merge_spatial` and others, in particular `plot_dtm3d()` and `add_dtm3d()` that now downsample on-disk rasters on-the-fly to display very large DTMs. On-disk rasters were already generally supported in previous versions but not every function was properly optimized to handle such objects.
+
+10. All the functions that return a raster (`pixel_metrics()` and `rasterize_*()`) are raster agnostic and can return rasters from `raster`, `terra` or `stars`. They have an argument `pkg = "raster|terra|stars"` to choose. The default is `terra` but this can be changed globally using:
     ```r
-    las = readLAS("classified.las")
-    nonveg = filter_poi(las, Classification != LASHIGHVEGETATION)
-    veg = filter_poi(las, Classification == LASHIGHVEGETATION)
-    x = plot(nonveg, color = "Classification")
-    plot(veg, add = x)
+    options(lidR.raster.default = "stars")
     ```
-    - for LAScatalog objects gains an argument `overlaps = TRUE` to highlight the overlaps.
 
-15. New function `add_lasrgb()` to add RGB attributes. The function updates the header in such a way that the LAS object has a valid point format that supports RGB.
-
-16. `LAScatalog` processing engine
-    - gains a generic option `opt_merge(ctg) <- FALSE` to disable final merging and force the engine to return a list
-    - gains a generic option `opt_independent_files(ctg) <- TRUE` to set adequate options to a collection of independent files, for example a set of circular ground inventory plots. It is equivalent to set no buffer, processing by file and no wall-to-wall guarantee.
-    - gains an option `autoread = TRUE` in `catalog_apply()`. Not actually intended to be used widely but might be convenient for some use cases.
-
-17. New function `get_range()`.
-
-18. `knnidw()` gains an argument `rmax` to set a maximum radius search in which to find the knn. This fixes computation time issues with non-convex point clouds.
-
-19. `track_sensor()` (formerly `sensor_tracking()`) 
-    - now has two available algorithms.
-    - supports systems with multiple pulses emission which formerly failed
-
-20. `writeLAS()` gains a parameter `index = TRUE` to automatically write a lax file along with the las/laz file.
-
-#### ENHANCEMENTS
-
-1. `readLAS()` now warns when reading incompatible files. Point coordinates are recomputed on-the-fly as it has always been done but now the user is aware of potential problems or precision loss.
-
-2. A new vignette named **LAScatalog processing engine** has been added and documents in-depth the `catalog_apply()` engine of lidR.
-
-3. In `clip_*()` several lines of codes were removed because they were not used. We suspected these lines covered old cases from lidR v1.x.y that are no longer relevant. If a user encounters problems, please report.
-
-4. The arguments `select` and `filter` from `readLAS()` are not expected to be used with a `LAScluster` when processing a `LAScatalog`. The options are carried by the `LAScatalog` itself with `opt_select()` and `opt_filter()`. If used, a warning is now thrown.
-
-5. Enhancements made here and there to improve the support of the CRS when reading and checking a LAS file.
-
-6. When processing by file with a raster output, automatic chunk extension to match with a raster resolution now performs a tighter extension.
-
-7. Minor modification of `print()` methods to enhance information displayed.
-
-8. All algorithms such as `tin()`, `p2r()`, `knnidw()`, `li2012()`, and so on, now have the classes `c("lidRAlgorithm", "something")` and a dedicated print function. The source code is no longer displayed when printing these objects
-    
+11. New function `catalog_map()` that simplifies `catalog_apply()` to a large degree. Yet it is not as versatile as `catalog_apply()` but well suits around 80% of use cases. Applying a user-defined function to a collection of LAS files is now as simple as:
     ```r
-    f = lmf(2)
-    f
-    #> Object of class lidR algorithm
-    #> Algorithm for: individual tree detection 
-    #> Designed to be used with: find_trees 
-    #> Native C++ parallelization: yes 
-    #> Parameters: 
-    #>  - circ = TRUE <logical>
-    #>  - hmin = 2 <numeric>
-    #>  - shape = circular <character>
-    #>  - ws = 2 <numeric>
+    my_fun <- function(las, ...) {
+      # do something with the point cloud
+      return(something)
+    }
+    res <- catalog_map(ctg, my_fun, param1 = 2, param2 = 5)
     ```
 
-9. In `grid_metrics()` the `RasterBrick` is built much faster.
+12. Operator `[` on `LAS` object has been overloaded to clip a point-cloud using a `bbox` or a `sfc`
+    ```r
+    sub <- las[sfc]
+    ```
+  
+13. `rasterize_terrain()` accepts an `sfc` as argument to force interpolation within a defined area.
 
-#### FIXES
+14. `normalize_height()` now always interpolates all points. It is no longer possible to get an error that some points cannot be interpolated. The problem of interpolating the DTM where there is no data is still present but we opted for a nearest neighbour approach with a warning instead of a failure. This prevents the method from failing after hours of computation for special cases somewhere in the file collection. This also means we removed the `na.rm` option that is no longer relevant.
 
-1. In `delineate_crowns()`, formerly named `tree_hull()`, when applied to a `LAScatalog` the buffer was not properly removed. The polygons were simply clipped using the bounding box of the chunk. Now the trees that have an apex in the buffer are removed and the trees that have an apex outside the buffer are retained. Thus, when merging, everything is smooth and continuous.
+15. New functions `header()`, `payload()`, `phb()`, `vlr()`, `evlr()` to get the corresponding data from a `LAS` object.
 
-2. `catalog_retile()` returns a `LAScatalog` with only the newly created files even if the folder contains other las files. It formerly read every las file in the folder leading to an invalid catalog if the folder already contained las files.
+16. New algorithm `shp_hline` and `shp_vline` for `segment_shapes()` [#499](https://github.com/r-lidar/lidR/issues/499)
 
-3. Previously in automatic filename generation the template `YCENTER` was not actually recognized. However, `XCENTER` was recognized but actually contained the value for `YCENTER`. This was working for `lasclip()` thanks to a previous fix but was still a problem in other functions when processing chunks.
+17. New algorithm `mcc` for ground classification.
 
-4. Function `wkt()` no longer masks the new function `wkt()` in `sp`.
+### Enhancement
 
-5.  `merge_spatial()` (formerly named `lasmergespatial()`) no longer fails with a LAS object containing a single point.
+1. The bounding box of the CHM computed with `rastertize_canopy()` or `grid_canopy()` is no longer affected by the `subcircle` tweak. See [#518](https://github.com/r-lidar/lidR/issues/518).
 
-## lidR v 2.x.y
+2. `readLAS()` can now read two or more files that do not have the same point format (see [#508](https://github.com/r-lidar/lidR/discussions/508))
 
-lidR v2.x.y changelog has been moved to [NEWS_v2.md](https://github.com/Jean-Romain/lidR/blob/master/NEWS_v2.md)
+3. `plot()` for `LAS` gains arguments `pal`, `breaks` and `nbreaks` similar to `sf`. Arguments `trim` and `colorPalette` are deprecated
+
+### Fix
+
+1. The metric `itot` from `stdmetrics_i` which generates troubles (see [#463](https://github.com/r-lidar/lidR/issues/463) [#514](https://github.com/r-lidar/lidR/issues/514)) is now `double` instead of `int`
+
+### Documentation
+
+- Man pages of `classify_*`, `rasterize_*`, `*_metrics`, `segment_*` and `normalize_*` were grouped.
+- The pdf version of the manual contains more documentation (more functions) but is 20 pages shorter, meaning that we tidied and cleaned up the documentation.
+
+

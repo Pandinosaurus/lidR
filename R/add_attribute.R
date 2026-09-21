@@ -1,12 +1,13 @@
 #' Add attributes into a LAS object
 #'
 #' A \link[=LAS-class]{LAS} object represents a las file in R. According to the
-#' \href{https://www.asprs.org/a/society/committees/standards/LAS_1_4_r13.pdf}{LAS specifications}
+#' \href{https://community.asprs.org/leadership-restricted/leadership-content/public-documents/standards}{LAS specifications}
 #' a las file contains a core of defined attributes, such as XYZ coordinates, intensity, return number,
 #' and so on, for each point. It is possible to add supplementary attributes.
 #'
 #' Users cannot assign names that are the same as the names of the core attributes. These functions are
-#' dedicated to adding data that are not part of the LAS specification. For example, \code{add_lasattribute(las, x, "R")} will fail because \code{R} is a name reserved for the red channel of a .las file that contains RGB
+#' dedicated to adding data that are not part of the LAS specification. For example, \code{add_lasattribute(las, x, "R")}
+#' will fail because \code{R} is a name reserved for the red channel of a .las file that contains RGB
 #' attributes. Use \code{add_lasrgb} instead.
 #' \describe{
 #' \item{\code{add_attribute}}{Simply adds a new column in the data but does not update the header. Thus the LAS
@@ -35,12 +36,13 @@
 #' be missing (see details).
 #' @param name character. The name of the extra bytes attribute to add in the file.
 #' @param desc character. A short description of the extra bytes attribute to add in the file (32 characters).
-#' @param type character. The data type of the extra bytes attribute. Can be \code{"uchar", "char", "ushort",
-#' "short", "uint", "int", "uint64", "int64", "float", "double"}.
+#' @param type character. The data type of the extra bytes attribute. Can be "uchar", "char", "ushort",
+#' "short", "uint", "int", "uint64", "int64", "float", "double".
 #' @param scale,offset numeric. The scale and offset of the data. NULL if not relevant.
 #' @param NA_value numeric or integer. NA is not a valid value in a las file. At time of writing it will
 #' be replaced by this value that will be considered as NA. NULL if not relevant.
-#' @param R,G,B integer. RGB values
+#' @param R,G,B,NIR integer. RGB and NIR values. Values are automatically scaled to 16 bits if they are
+#' coded on 8 bits (0 to 255).
 #'
 #' @return An object of class \link[=LAS-class]{LAS}
 #'
@@ -51,31 +53,32 @@
 #' las <- readLAS(LASfile, select = "xyz")
 #'
 #' print(las)
-#' print(las@header)
+#' print(header(las))
 #'
 #' x <- 1:30
 #'
 #' las <- add_attribute(las, x, "mydata")
 #' print(las)        # The las object has a new attribute called "mydata"
-#' print(las@header) # But the header has not been updated. This new data will not be written
+#' print(header(las)) # But the header has not been updated. This new data will not be written
 #'
 #' las <- add_lasattribute(las, x, "mydata2", "A new data")
 #' print(las)        # The las object has a new attribute called "mydata2"
-#' print(las@header) # The header has been updated. This new data will be written
+#' print(header(las)) # The header has been updated. This new data will be written
 #'
 #' # Optionally if the data is already in the LAS object you can update the header skipping the
 #' # parameter x
-#' las <- add_lasattribute(las, name = "mydata", desc = "Amplitude")
-#' print(las@header)
+#' las <- add_attribute(las, x, "newattr")
+#' las <- add_lasattribute(las, name = "newattr", desc = "Amplitude")
+#' print(header(las))
 #'
 #' # Remove an extra bytes attribute
 #' las <- remove_lasattribute(las, "mydata2")
 #' print(las)
-#' print(las@header)
+#' print(header(las))
 #'
 #' las <- remove_lasattribute(las, "mydata")
 #' print(las)
-#' print(las@header)
+#' print(header(las))
 NULL
 
 #' @export
@@ -101,7 +104,7 @@ add_lasattribute = function(las, x, name, desc)
 
   if (missing(x))
   {
-    if (!name %in% names(las@data))
+    if (!name %in% names(las))
       stop(glue::glue("{name} is not an attribute of the LAS object."), call. = FALSE)
 
     x <- las@data[[name]]
@@ -142,7 +145,7 @@ add_lasattribute_manual = function(las, x, name, desc, type, offset = NULL, scal
 
   if (missing(x))
   {
-    if (!name %in% names(las@data))
+    if (!name %in% names(las))
       stop(glue::glue("{name} is not an attribute of the LAS object."), call. = FALSE)
 
     x <- las@data[[name]]
@@ -196,11 +199,11 @@ add_lasrgb <- function(las, R, G, B)
   {
     # nothing to do
   }
-  else if ("NIR" %in% names(las@data))
+  else if ("NIR" %in% names(las))
   {
     format <- 8L
   }
-  else if ("gpstime" %in% names(las@data))
+  else if ("gpstime" %in% names(las))
   {
     format <- 3L
   }
@@ -215,13 +218,32 @@ add_lasrgb <- function(las, R, G, B)
 
 #' @export
 #' @rdname add_attribute
+add_lasnir <- function(las, NIR)
+{
+  stopifnotlas(las)
+  stopifnot(is.integer(NIR))
+  assert_is_of_length(NIR, npoints(las))
+
+  maxnir <- max(NIR, na.rm = TRUE)
+
+  scale <- 1L
+  if (maxnir <= 255)
+    scale <- 257L
+
+  las@data$NIR <- NIR*scale
+  las@header@PHB[["Point Data Format ID"]] <- 8L
+  return(las)
+}
+
+#' @export
+#' @rdname add_attribute
 remove_lasattribute = function(las, name)
 {
   stopifnotlas(las)
   assert_is_a_string(name)
   stopif_forbidden_name(name)
 
-  if (!name %in% names(las@data))
+  if (!name %in% names(las))
   {
      message(glue::glue("{name} is not an attribute of the LAS object."))
      return(las)
@@ -231,7 +253,7 @@ remove_lasattribute = function(las, name)
 
   if (is.null(eb))
   {
-    message(glue::glue("{name} is not an extrabytes attribute of the LAS object."))
+    #message(glue::glue("{name} is not an extrabytes attribute of the LAS object."))
     las@data[[name]] <- NULL
     return(las)
   }

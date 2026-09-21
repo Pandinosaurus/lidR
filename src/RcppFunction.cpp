@@ -50,7 +50,7 @@ NumericVector C_smooth(S4 las, double size, int method, int shape, double sigma,
 }
 
 // [[Rcpp::export(rng = false)]]
-LogicalVector C_highest(S4 las, S4 layout)
+LogicalVector C_highest(S4 las, List layout)
 {
   LAS pt(las);
   pt.filter_with_grid(layout, true);
@@ -58,7 +58,7 @@ LogicalVector C_highest(S4 las, S4 layout)
 }
 
 // [[Rcpp::export(rng = false)]]
-LogicalVector C_lowest(S4 las, S4 layout)
+LogicalVector C_lowest(S4 las, List layout)
 {
   LAS pt(las);
   pt.filter_with_grid(layout, false);
@@ -66,11 +66,10 @@ LogicalVector C_lowest(S4 las, S4 layout)
 }
 
 // [[Rcpp::export(rng = false)]]
-LogicalVector C_in_polygon(S4 las, std::string wkt, int ncpu)
+SEXP C_in_polygon(S4 las, Rcpp::List polygons, bool by_poly)
 {
-  LAS pt(las, ncpu);
-  pt.filter_in_polygon(wkt);
-  return Rcpp::wrap(pt.filter);
+  LAS pt(las);
+  return pt.find_polygon_ids(polygons, by_poly);
 }
 
 // [[Rcpp::export(rng = false)]]
@@ -106,7 +105,7 @@ LogicalVector C_pmf(S4 las, NumericVector ws, NumericVector th, LogicalVector fi
 }
 
 // [[Rcpp::export(rng = false)]]
-NumericVector C_rasterize(S4 las, S4 layout, double subcircle = 0, int method = 1)
+NumericVector C_rasterize(S4 las, List layout, double subcircle = 0, int method = 1)
 {
   LAS pt(las);
   return pt.rasterize(layout, subcircle, method);
@@ -119,7 +118,7 @@ NumericVector C_knnidw(S4 las, NumericVector x, NumericVector y, int k, double p
   return pt.interpolate_knnidw(x,y,k,p,rmax);
 }
 
-// [[Rcpp::export]]
+// [[Rcpp::export(rng = false)]]
 List C_point_metrics(S4 las, unsigned int k, double r, int nalloc, SEXP call, SEXP env, LogicalVector filter)
 {
   LAS pt(las);
@@ -128,11 +127,22 @@ List C_point_metrics(S4 las, unsigned int k, double r, int nalloc, SEXP call, SE
   return pt.point_metrics(k, r, data, nalloc, call, env);
 }
 
+// [[Rcpp::export(rng = false)]]
+bool is_disable_point_metrics()
+{
+  #ifdef WITHSETLENGTH
+  return false;
+  #else
+  return true;
+  #endif
+}
+
+
 // [[Rcpp::export]]
-NumericVector C_fast_knn_metrics(S4 las, unsigned int k, IntegerVector metrics, int cpu)
+NumericVector C_knn_distance(S4 las, unsigned int k, int cpu)
 {
   LAS pt(las, cpu);
-  return pt.fast_knn_metrics(k, metrics);
+  return pt.knn_distance(k);
 }
 
 // [[Rcpp::export(rng = false)]]
@@ -151,9 +161,10 @@ NumericVector C_lasrange(S4 las, DataFrame flightlines)
 }
 
 //[[Rcpp::export(rng = false)]]
-LogicalVector C_local_maximum(S4 las, NumericVector ws, int ncpu)
+LogicalVector C_local_maximum(S4 las, NumericVector ws, LogicalVector filter, int ncpu)
 {
   LAS pt(las, ncpu);
+  pt.new_filter(filter);
   pt.filter_local_maxima(ws);
   return Rcpp::wrap(pt.filter);
 }
@@ -210,6 +221,74 @@ int C_check_gpstime(NumericVector t, IntegerVector rn)
   return sum;
 }
 
+//[[Rcpp::export(rng = false)]]
+DataFrame C_eigen_metrics(S4 las, int k, double r, bool coeffs, LogicalVector filter, int ncpu)
+{
+  LAS pt(las, ncpu);
+  pt.new_filter(filter);
+  return pt.eigen_decomposition(k, r, coeffs);
+}
+
+//[[Rcpp::export(rng = false)]]
+DataFrame C_fast_eigen_decomposition(S4 las, int k, double r, bool coeffs, int ncpu)
+{
+  LAS pt(las, ncpu);
+  return pt.fast_eigen_decomposition(k, r, coeffs);
+}
+
+
+#include "lidR/Grid3D.h"
+
+//[[Rcpp::export(rng = false)]]
+IntegerVector C_connected_component(S4 las, double res, int connectivity)
+{
+  lidR::Grid3D grid(las, res);
+  return grid.connected_components(connectivity);
+}
+
+//[[Rcpp::export(rng = false)]]
+IntegerVector C_voxel_id(S4 las, double res)
+{
+  lidR::Grid3D grid(las, res);
+
+  DataFrame data = as<DataFrame>(las.slot("data"));
+  NumericVector X = data["X"];
+  NumericVector Y = data["Y"];
+  NumericVector Z = data["Z"];
+
+  std::vector<int64_t> id(X.size());
+
+  for (auto i = 0 ; i < X.size() ; i++)
+  {
+    int64_t cell = grid.get_cell(X[i], Y[i], Z[i]);
+    id[i] = cell;
+  }
+
+  std::unordered_map<int64_t, int> id_map;
+  std::vector<int64_t> unique_ids = id;
+
+  // Remove duplicates while preserving order
+  std::sort(unique_ids.begin(), unique_ids.end());
+  unique_ids.erase(std::unique(unique_ids.begin(), unique_ids.end()), unique_ids.end());
+
+  // Map each unique int64_t to an int
+  for (size_t i = 0; i < unique_ids.size(); ++i)
+  {
+    id_map[unique_ids[i]] = static_cast<int>(i);
+  }
+
+  // Create a new IntegerVector for remapped ids
+  IntegerVector remapped_ids(id.size());
+  for (size_t i = 0; i < id.size(); ++i)
+  {
+    remapped_ids[i] = id_map[id[i]];
+  }
+
+  return remapped_ids;
+}
+
+
+
 /*
  * ======= FAST BASE FUNCTIONS =========
  */
@@ -249,10 +328,13 @@ void fast_quantization(NumericVector x, double scale, double offset)
 
   for (NumericVector::iterator it = x.begin(), end = x.end() ; it != end ; ++it)
   {
-    u = (*it - offset)/scale;
-    if (u > um || u < -um) Rcpp::stop("Non quantizable value outside the range of representable values of type 'int'");
-    X = std::round((*it - offset)/scale);
-    *it = X * scale + offset;
+    if (!Rcpp::traits::is_nan<REALSXP>(*it) && !Rcpp::traits::is_na<REALSXP>(*it))
+    {
+      u = (*it - offset)/scale;
+      if (u > um || u < -um) Rcpp::stop("Non quantizable value outside the range of representable values of type 'int'");
+      X = std::round((*it - offset)/scale);
+      *it = X * scale + offset;
+    }
   }
 
   return;
@@ -326,6 +408,35 @@ NumericVector roundc(NumericVector x, int digit = 0)
   }
 
   return y;
+}
+
+// [[Rcpp::export(rng=false)]]
+NumericVector bitmerge(IntegerVector u, IntegerVector v)
+{
+  if (u.size() != v.size())
+    Rcpp::stop("Internal error in bitmerge: u and v have different sizes");
+
+  double t;
+  int32_t  x;
+  int32_t  y;
+  uint32_t n;
+  uint32_t m;
+  uint64_t z;
+  int s = u.size();
+  NumericVector o(s);
+
+  for (int i = 0 ; i < s ; ++i)
+  {
+    x = u[i];
+    y = v[i];
+    memcpy(&n, &x, sizeof(x));
+    memcpy(&m, &y, sizeof(y));
+    z = (uint64_t) n << 32 | m;
+    t = static_cast<double>(z);
+    o[i] = t;
+  }
+
+  return o;
 }
 
 /*

@@ -1,44 +1,16 @@
-# ===============================================================================
-#
-# PROGRAMMERS:
-#
-# jean-romain.roussel.1@ulaval.ca  -  https://github.com/Jean-Romain/lidR
-#
-# COPYRIGHT:
-#
-# Copyright 2016-2018 Jean-Romain Roussel
-#
-# This file is part of lidR R package.
-#
-# lidR is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>
-#
-# ===============================================================================
-
 #' Read .las or .laz files
 #'
 #' Reads .las or .laz files into an object of class \link[=LAS-class]{LAS}. If several files are read at
 #' once the returned LAS object is considered as one LAS file. The optional parameters enable the user
 #' to save a substantial amount of memory by choosing to load only the attributes or points of interest.
-#' LAS formats 1.1 to 1.4 are supported. Point Data Record Format 0,1,2,3,5,6,7,8 are supported.\cr\cr
-#' `readLAS` is the original function and always works. Using one of the `read*LAS` functions
+#' LAS formats 1.0 to 1.4 are supported. Point Data Record Format 0 to 10 are supported.\cr\cr
+#' `readLAS` is the original function and always works. Using one of the `readALS` or `readTLS` functions
 #' adds information to the returned object to register a point-cloud type. Registering the correct point
-#' type **may** improve the performance of some functions by enabling users to select an appropriate spatial index.
-#' See \link[=lidR-spatial-index]{spatial indexing}. Notice that by legacy and for backwards-compatibility reasons, 
-#' `readLAS()` and `readALSLAS()` are equivalent because lidR was originally designed for ALS and thus the 
-#' original function `readLAS()` was (supposedly) used for ALS. Reading a TLS dataset with `readLAS()` instead 
-#' of `readTLSLAS()` is perfectly valid and performs similarly to versions `<= 3.0.0`, with neither 
-#' performance degradation nor improvements.
+#' type improves the performance of some functions by enabling users to select an appropriate spatial index.
+#' See \link[=lidR-spatial-index]{spatial indexing}. Notice that by legacy and for backwards-compatibility reasons,
+#' `readLAS()` and `readALS()` are equivalent because lidR was originally designed for ALS and thus the
+#' original function `readLAS()` was (supposedly) used for ALS. Reading a TLS dataset with `readLAS()` instead
+#' of `readTLS()` is perfectly valid but less powerful.
 #'
 #'
 #' **Select:** the 'select' argument specifies the data that will actually be loaded. For example,
@@ -47,7 +19,8 @@
 #' r - return number, c - classification, s - synthetic flag, k - keypoint flag, w - withheld flag,
 #' o - overlap flag (format 6+), u - user data, p - point source ID, e - edge of flight line flag,
 #' d - direction of scan flag, R - red channel of RGB color, G - green channel of RGB color,
-#' B - blue channel of RGB color, N - near-infrared channel. C - scanner channel (format 6+).
+#' B - blue channel of RGB color, N - near-infrared channel, C - scanner channel (format 6+),
+#' W - Full waveform.
 #' Also numbers from 1 to 9 for the extra bytes data numbers 1 to 9. 0 enables all extra bytes to be
 #' loaded and '*' is the wildcard that enables everything to be loaded from the LAS file. \cr
 #' Note that x, y, z are implicit and always loaded. 'xyzia' is equivalent to 'ia'.\cr\cr
@@ -57,6 +30,8 @@
 #' those from `LASlib` and can be found by running the following command: `readLAS(filter = "-help")`.
 #' (see also \link[rlas:read.las]{rlas::read.las}). From `rlas` v1.3.6 the transformation commands
 #' can also be passed via the argument filter.
+#'
+#' @template section-fwf
 #'
 #' @param files characters. Path(s) to one or several a file(s). Can also be a
 #' \link[=LAScatalog-class]{LAScatalog} object.
@@ -81,7 +56,7 @@ readLAS = function(files, select = "*", filter = "")
 {
   if (filter == "-h" | filter == "-help")
   {
-    rlas:::lasfilterusage()
+    rlas::help_filter()
     return(invisible())
   }
 
@@ -128,31 +103,31 @@ readLAS.LAScluster = function(files, select = NULL, filter = NULL)
   if (!is.null(select)) warning("Argument 'select' is not used with a LAScluster. Use opt_select() with the LAScatalog instead.", call. = FALSE)
   if (!is.null(filter)) warning("Argument 'filter' is not used with a LAScluster. Use opt_filter() with the LAScatalog instead.", call. = FALSE)
 
-  if (!all(file.exists(files@files)) && all(files@alt_dir != "")) {
+  if (!all(file_exists(files@files)) && all(files@alt_dir != "")) {
     for (alt_dir in files@alt_dir) {
       paths <- paste0(alt_dir, basename(files@files))
-      if (all(file.exists(paths))) break
+      if (all(file_exists(paths))) break
     }
     files@files <- paths
   }
 
-  if (!all(file.exists(files@files))) stop("File not found", call. = FALSE)
+  if (!all(file_exists(files@files))) stop("File not found", call. = FALSE)
 
   buffer <- X <- Y <- NULL
 
   las <- readLAS(files@files, files@select, files@filter)
-  las@proj4string <- files@proj4string
+  st_crs(las) <- st_crs(files)
   las@index <- files@index
 
-  las@data[, buffer := LIDRNOBUFFER]
+  las@data[["buffer"]] <- rep(LIDRNOBUFFER, npoints(las))
 
   if (files@buffer > 0)
   {
-    ext     <- raster::extent(files)
-    ybottom <- ext@ymin
-    ytop    <- ext@ymax
-    xleft   <- ext@xmin
-    xright  <- ext@xmax
+    ext     <- st_bbox(files)
+    ybottom <- ext$ymin
+    ytop    <- ext$ymax
+    xleft   <- ext$xmin
+    xright  <- ext$xmax
     xc      <- files@center$x
     yc      <- files@center$y
     r       <- (files@width - 2*files@buffer)/2
@@ -213,13 +188,25 @@ streamLAS.LAScluster = function(x, ofile, select = "*", filter = "", filter_wkt 
 
 streamLAS.character = function(x, ofile, select = "*", filter = "", filter_wkt = "")
 {
+  # Compatibility with rlas that no longer supports WKT string to filter polygons
+  geom = list()
+  if (utils::packageVersion("rlas") >= "1.8.0")
+  {
+    if (is.character(filter_wkt) && filter_wkt[1] != "")
+    {
+      geom = sf::st_as_sfc(filter_wkt)
+      geom = extract_polygons(geom)
+    }
+  }
+
   assert_all_are_existing_files(x)
 
-  islas <- tools::file_ext(x) %in% c("las", "laz", "ply", "LAS", "LAZ", "PLY")
+  clean_x <- sub("\\?.*$", "", x)
+  islas <- tools::file_ext(clean_x) %in% c("las", "laz", "ply", "LAS", "LAZ", "PLY")
 
   if (any(!islas)) stop("File(s) are not las or laz")
 
-  ifiles <- normalizePath(x)
+  ifiles <- normalizePath(x, mustWork = FALSE)
 
   if (ofile != "")
   {
@@ -237,7 +224,7 @@ streamLAS.character = function(x, ofile, select = "*", filter = "", filter_wkt =
       temp.header <- rlas::read.lasheader(file)
 
       if (temp.header[["Point Data Format ID"]] != header[["Point Data Format ID"]] )
-        stop("Different files have different Point Data Format ID and are incompatible.", call. = FALSE)
+        warning("Different files have different Point Data Format ID and are incompatible. Some attribute may have been discarded or zeroed", call. = FALSE)
 
       if (temp.header[["X scale factor"]] != header[["X scale factor"]] )
         warning("Different files have different X scale factors and are incompatible. The first file has precedence and data were rescaled.", call. = FALSE)
@@ -253,7 +240,11 @@ streamLAS.character = function(x, ofile, select = "*", filter = "", filter_wkt =
     }
   }
 
-  data <- rlas:::stream.las(ifiles, ofile, select, filter, filter_wkt)
+  if (utils::packageVersion("rlas") >= "1.8.0") {
+    data <- rlas::read_and_write.las(ifiles, ofile, select, filter, geom)
+  } else {
+    data <- rlas::read_and_write.las(ifiles, ofile, select, filter, filter_wkt)
+  }
 
   if (is.null(data))
     return(invisible())
@@ -285,5 +276,19 @@ streamLAS.character = function(x, ofile, select = "*", filter = "", filter_wkt =
     }
   }
 
-  return(LAS(data, header, check = TRUE, index = LIDRDEFAULTINDEX))
+  return(LAS(data, header, check = TRUE, index = NULL, no_attr_name_check = TRUE))
+}
+
+is_remote = function(paths)
+{
+  remote_pattern <- "^https?://|^/vsi(curl|s3|gs|az|adls|oss|swift)/"
+  is_remote <- grepl(remote_pattern, paths)
+}
+
+file_exists <- function(...)
+{
+  paths <- c(...)
+  is_remote = is_remote(paths)
+  result <- ifelse(is_remote, TRUE, file.exists(paths))
+  result
 }

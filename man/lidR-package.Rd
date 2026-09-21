@@ -7,13 +7,13 @@
 \title{lidR: airborne LiDAR for forestry applications}
 \description{
 lidR provides a set of tools to manipulate airborne LiDAR data in forestry contexts. The package
-works essentially with .las or .laz files. The toolbox includes algorithms for DSM, CHM, DTM, ABA,
-normalisation, tree detection, tree segmentation and other tools, as well as an engine to process
-wide LiDAR coverages split into many files.
+works with .las or .laz files. The toolbox includes algorithms for DSM, CHM, DTM, ABA,
+normalisation, tree detection, tree segmentation, tree delineation, colourization, validation and
+other tools, as well as a processing engine to process broad LiDAR coverage split into many files.
 }
 \details{
 To learn more about lidR, start with the vignettes: browseVignettes(package = "lidR"). Users can also
-find unofficial supplementary documentation in the \href{https://jean-romain.github.io/lidRbook/}{lidR book}.
+find unofficial supplementary documentation in the \href{https://r-lidar.github.io/lidRbook/}{lidR book}.
 To ask "how to" questions please ask on \href{https://gis.stackexchange.com/}{gis.stackexchange.com}
 with the tag \code{lidr}.
 }
@@ -24,10 +24,9 @@ with the tag \code{lidr}.
 Should lengthy operations show a progress bar? Default: TRUE}
 \item{\code{lidR.progress.delay}}{The progress bar appears only for long operations. After how many seconds
 of computation does the progress bar appear? Default: 2}
-\item{\code{lidR.verbose}}{Make the package verbose. Default: FALSE}
-\item{\code{lidR.buildVRT}}{The functions \code{grid_*} can write the rasters sequentially on the
-disk and load back a virtual raster mosaic (VRT) instead of the list of written files. Should
-a VRT be built? Default: TRUE}
+\item{\code{lidR.raster.default}}{The functions that return a raster are raster agnostic meaning
+that they work either with rasters from packages `raster`, `stars` or `terra`. By default they return
+rasters from `stars`. Can be one of "raster", "stars" or "terra". Default: "terra"}
 \item{\code{lidR.check.nested.parallelism}}{The catalog processing engine (\link{catalog_apply})
 checks the parallel strategy chosen by the user and verify if C++ parallelization with
 OpenMP should be disabled to avoid nested parallel loops. Default: TRUE. If FALSE
@@ -39,16 +38,17 @@ and will respect the settings of \link{set_lidr_threads}.}
 \seealso{
 Useful links:
 \itemize{
-  \item \url{https://github.com/Jean-Romain/lidR}
-  \item Report bugs at \url{https://github.com/Jean-Romain/lidR/issues}
+  \item \url{https://github.com/r-lidar/lidR}
+  \item Report bugs at \url{https://github.com/r-lidar/lidR/issues}
 }
 
 }
 \author{
-\strong{Maintainer}: Jean-Romain Roussel \email{jean-romain.roussel.1@ulaval.ca} [copyright holder]
+\strong{Maintainer}: Jean-Romain Roussel \email{info@r-lidar.com} [copyright holder]
 
 Authors:
 \itemize{
+  \item Jean-Romain Roussel \email{info@r-lidar.com} [copyright holder]
   \item David Auty (Reviews the documentation) [contributor]
 }
 
@@ -58,7 +58,9 @@ Other contributors:
   \item Andrew Sánchez Meador (Implemented wing2015() for segment_snags()) [contributor]
   \item Bourdon Jean-François (Contributed to Roussel2020() for track_sensor()) [contributor]
   \item Gatziolis Demetrios (Implemented Gatziolis2019() for track_sensor()) [contributor]
-  \item Leon Steinmeier \email{Lenostatos@gmx.de} (Contributed to parallelization management) [contributor]
+  \item Leon Steinmeier (Contributed to parallelization management) [contributor]
+  \item Stanislaw Adaszewski (Author of the C++ concaveman code) [copyright holder]
+  \item Benoît St-Onge (Author of the 'chm_prep' function) [copyright holder]
 }
 
 }

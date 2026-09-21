@@ -10,3 +10,8 @@ doc
 *Rplots.pdf
 revdep
 CRAN-RELEASE
+/doc/
+/Meta/
+autom4te.cache
+config.log
+config.status

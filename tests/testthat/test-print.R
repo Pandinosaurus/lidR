@@ -4,10 +4,12 @@ las     <- example
 
 LASfile <- system.file("extdata", "extra_byte.laz", package = "rlas")
 las2     <- readLAS(LASfile)
+las2@header@EVLR = las2@header@VLR
 
 las3 <- random_10_points
 las3@data$X <- las3@data$X * 1000
 las3@data$Y <- las3@data$Y * 1000
+las3 = las_update(las3)
 
 folder = system.file("extdata", "", package = "lidR")
 ctg = readLAScatalog(folder)
@@ -51,7 +53,7 @@ test_that("print works with LAScatalog", {
 
 test_that("print works with LAScluster", {
   sink(tempfile())
-  cl = lidR:::catalog_makecluster(ctg)[[1]]
+  cl = engine_chunks(ctg)[[1]]
   expect_error(show(cl), NA)
   sink(NULL)
 })
@@ -64,7 +66,7 @@ test_that("print works with lidR algorithms ", {
   k <- tin()
   j <- p2r(2)
   l <- random(2)
-  m <- csf()
+  m <- pmf(3,4)
   #o <- wing2015()
   p <- Roussel2020()
 
@@ -81,4 +83,12 @@ test_that("print works with lidR algorithms ", {
   sink(NULL)
 
 })
+
+test_that("print raster_template works", {
+  sink(tempfile())
+  tpl <- lidR:::raster_layout(megaplot, 10)
+  expect_error(print(tpl), NA)
+  sink(NULL)
+})
+
 

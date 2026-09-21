@@ -9,9 +9,8 @@ las_check(las, print = TRUE, ...)
 \arguments{
 \item{las}{An object of class \link[lidR:LAS-class]{LAS} or \link[lidR:LAScatalog-class]{LAScatalog}.}
 
-\item{print}{logical. By default, prints a report into standard ouptut. If \code{print = FALSE}
-the functions returns a \code{list} with two elements named 'warnings' and 'errors' containing a
-vector with the reported warnings and errors.}
+\item{print}{logical. By default, prints a report and returns a \code{list} invisibly. If
+\code{print = FALSE} the functions returns a \code{list} visibly and do not print the report.}
 
 \item{...}{Use \code{deep = TRUE} on a LAScatalog only. Instead of a shallow inspection it reads
 all the files and performs a deep inspection.}
@@ -29,8 +28,10 @@ For a LAS object it checks:
 \item if the header is valid according to las specification
 \item if the point cloud is in accordance with the header
 \item if the point cloud has duplicated points and degenerated ground points
+\item if gpstime and pulses are consistent
 \item it the coordinate reference sytem is correctly recorded
 \item if some pre-processing, such as normalization or ground filtering, is already done.
+\item and much more
 }
 For a LAScatalog object it checks:
 \itemize{
@@ -46,7 +47,7 @@ las <- readLAS(LASfile)
 las_check(las)
 }
 \seealso{
-Other las utilities: 
+Other las utilities:
 \code{\link{las_utilities}}
 }
 \concept{las utilities}

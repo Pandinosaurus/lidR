@@ -1,6 +1,5 @@
 context("classify_ground")
 
-file <- system.file("extdata", "Topography.laz", package="lidR")
 las = clip_rectangle(topography, 273450, 5274350, 273550, 5274450)
 ctg = topography_ctg
 
@@ -12,14 +11,13 @@ opt_progress(ctg) <- FALSE
 ws = seq(3,21, 5)
 th = seq(0.1, 2, length.out = length(ws))
 
-mypmf = pmf(ws, th)
-mycsf = csf(TRUE, 1, 1, time_step = 1)
-
 test_that("classify_ground pmf works with LAS", {
+
+  mypmf = pmf(ws, th)
 
   las <- classify_ground(las, mypmf)
 
-  n = names(las@data)
+  n = names(las)
 
   expect_true("Classification" %in% n)
   expect_equal(sort(unique(las@data$Classification)), c(1L, 2L))
@@ -31,9 +29,11 @@ test_that("classify_ground pmf works with LAS", {
 test_that("classify_ground pmf works with LAScatalog", {
   opt_chunk_buffer(ctg) <- 30
 
+  mypmf = pmf(ws, th)
+
   expect_error(classify_ground(ctg, mypmf), "output file")
 
-  opt_output_files(ctg) <- paste0(tmpDir(), "file_{XLEFT}_{YBOTTOM}")
+  opt_output_files(ctg) <- paste0(tempdir(), "/file_{XLEFT}_{YBOTTOM}")
 
   ctg2 = classify_ground(ctg, mypmf)
   las2 = readLAS(ctg2)
@@ -42,9 +42,14 @@ test_that("classify_ground pmf works with LAScatalog", {
 })
 
 test_that("classify_ground csf works with LAS", {
+
+  skip_if_not_installed("RCSF")
+
+  mycsf = csf(TRUE, 1, 1, time_step = 1)
+
   las <- classify_ground(las, mycsf)
 
-  n = names(las@data)
+  n = names(las)
 
   expect_true("Classification" %in% n)
   expect_equal(sort(unique(las@data$Classification)), c(1L, 2L))
@@ -52,9 +57,13 @@ test_that("classify_ground csf works with LAS", {
 })
 
 test_that("classify_ground csf works with LAScatalog", {
+
+  skip_if_not_installed("RCSF")
   skip_on_cran()
 
-  opt_output_files(ctg) <- paste0(tmpDir(), "file_{XLEFT}_{YBOTTOM}_ground")
+  mycsf = csf(TRUE, 1, 1, time_step = 1)
+
+  opt_output_files(ctg) <- paste0(tempdir(), "/file_{XLEFT}_{YBOTTOM}_ground")
   opt_chunk_buffer(ctg) <- 30
 
   ctg2 = classify_ground(ctg, mycsf)
@@ -64,23 +73,47 @@ test_that("classify_ground csf works with LAScatalog", {
 })
 
 test_that("classify_ground csf works with last_returns = FALSE", {
+
+  skip_if_not_installed("RCSF")
+
   las <- lidR:::generate_las(500)
   las <- classify_ground(las, csf(), last_returns = FALSE)
 
-  n = names(las@data)
+  n = names(las)
 
   expect_true("Classification" %in% n)
   expect_equal(unique(las@data$Classification), c(1L, 2L))
   expect_equal(sum(las@data$Classification == 2L), 105L)
 })
 
+test_that("classify_ground ptd works",
+{
+  skip_on_cran()
+  skip_on_os("mac")
+
+  myptd = ptd()
+  las <- classify_ground(topography, myptd)
+  ans <- as.numeric(table(las$Classification))
+  class = c(48967,24383,53)
+  expect_equal(ans, class)
+
+  myptd = ptd(angle = 1, distance = 0.5)
+  las <- classify_ground(topography, myptd)
+  ans <- as.numeric(table(las$Classification))
+  class = c(67271,4758,1374)
+  expect_equal(ans, class)
+})
+
 test_that("classify_ground works with last_returns = TRUE but attribute not properly populated", {
+
+  skip_if_not_installed("RCSF")
+
   las <- lidR:::generate_las(500)
   las@data$ReturnNumber <- 0
   las@data$Classification <- NULL
   las <- suppressWarnings(classify_ground(las, csf(), last_returns = TRUE))
 
-  n = names(las@data)
+  n = names(las)
 
   expect_true("Classification" %in% n)
   expect_equal(unique(las@data$Classification), c(1L, 2L))
@@ -92,11 +125,13 @@ test_that("makeZhangParam works", {
 })
 
 test_that("classify_ground does not erase former classification (but new ground points)", {
-
+  mypmf = pmf(ws, th)
   las <- topography
   las <- filter_poi(las, X < mean(X), Y < mean(Y))
   las$Classification[las$Classification == LASGROUND] <- LASUNCLASSIFIED
   las <- classify_ground(las, mypmf)
   expect_equal(names(table(las$Classification)), c("1", "2", "9"))
 })
+
+
 

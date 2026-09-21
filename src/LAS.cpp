@@ -1,19 +1,56 @@
-#if defined(__GNUC__) && (__GNUC__ < 5) && !defined(__clang__) && !defined(__llvm__) && !defined(__INTEL_COMPILER)
-#include "gcc_4_9_patch/std_is_trivially_substitutes.hpp"
-#include "gcc_4_9_patch/boost_compare_patched.hpp"
-#endif
-
 #include "LAS.h"
 #include "Progress.h"
 #include "myomp.h"
 #include "SpatialIndex.h"
+#include "nanoflann/nanoflann.h"
 #include <limits>
-#include <boost/geometry.hpp>
 
 using namespace lidR;
 
+class DataFrameAdaptor
+{
+public:
+  std::vector<Rcpp::NumericVector> coords;
+  size_t dim;
+
+  DataFrameAdaptor(const Rcpp::DataFrame& df, std::vector<std::string> col_names)
+  {
+    dim = col_names.size();
+    coords.reserve(dim);
+    for (const auto& name : col_names)
+      coords.push_back(df[name]);
+  }
+
+  inline size_t kdtree_get_point_count() const { return coords[0].size(); }
+  inline double kdtree_get_pt(const size_t idx, const size_t d) const {
+    return coords[d][idx];
+  }
+  template <class BBOX> bool kdtree_get_bbox(BBOX&) const { return false; }
+};
+
+using KDTree = nanoflann::KDTreeSingleIndexAdaptor<nanoflann::L2_Simple_Adaptor<double, DataFrameAdaptor>, DataFrameAdaptor, 3>;
+
+
+bool pnpoly(NumericMatrix polygon, double x, double y)
+{
+  int nvert = polygon.nrow();
+  bool c = false;
+  int i, j;
+  for (i = 0, j = nvert - 1; i < nvert; j = i++)
+  {
+    if (((polygon(i, 1) > y) != (polygon(j, 1) > y)) &&
+        (x < (polygon(j, 0) - polygon(i, 0)) * (y - polygon(i, 1)) / (polygon(j, 1) - polygon(i, 1)) + polygon(i, 0))) {
+      c = !c;
+    }
+  }
+  return c;
+}
+
 LAS::LAS(S4 las, int ncpu)
 {
+  Rcpp::List index = las.slot("index");
+  this->sensor = index["sensor"];
+
   this->las = las;
 
   DataFrame data = as<DataFrame>(las.slot("data"));
@@ -31,14 +68,16 @@ LAS::LAS(S4 las, int ncpu)
   this->ncpu = ncpu;
   this->filter.resize(npoints);
   std::fill(filter.begin(), filter.end(), false);
+  this->skip.resize(npoints);
+  std::fill(skip.begin(), skip.end(), false);
 }
 
 void LAS::new_filter(LogicalVector b)
 {
   if (b.size() == 1)
-    std::fill(filter.begin(), filter.end(), b[0]);
+    std::fill(skip.begin(), skip.end(), b[0]);
   else if (b.size() == (int)npoints)
-    this->filter = Rcpp::as< std::vector<bool> >(b);
+    this->skip = Rcpp::as< std::vector<bool> >(b);
   else
     Rcpp::stop("Internal error in 'new_filter"); // # nocov
 }
@@ -145,7 +184,7 @@ void LAS::z_open(double resolution)
 
   NumericVector Z_out(npoints);
 
-  SpatialIndex tree(las, filter);
+  SpatialIndex tree(las, skip);
 
   Progress p(2*npoints, "Morphological filter: ");
 
@@ -154,7 +193,7 @@ void LAS::z_open(double resolution)
   {
     p.check_abort();
     p.update(i);
-    if (!filter[i]) continue;
+    if (!skip[i]) continue;
 
     std::vector<PointXYZ> pts;
     Rectangle rect(X[i]-half_res, X[i]+half_res,Y[i]-half_res, Y[i]+half_res);
@@ -180,7 +219,7 @@ void LAS::z_open(double resolution)
   {
     p.check_abort();
     p.update(i+npoints);
-    if (!filter[i]) continue;
+    if (!skip[i]) continue;
 
     std::vector<PointXYZ> pts;
     Rectangle rect(X[i]-half_res, X[i]+half_res,Y[i]-half_res, Y[i]+half_res);
@@ -247,65 +286,79 @@ void LAS::i_range_correction(DataFrame flightlines, double Rs, double f)
   return;
 }
 
+// x y z t the spatio-temporal coordinates of the sensor
+// k the index of the current point
 double LAS::range(NumericVector &x, NumericVector &y , NumericVector &z, NumericVector &t,  int k, double R_control)
 {
-  NumericVector::iterator it;
-  double dx, dy, dz, r, R;
-  int j = 0;
+  // Considering a set of xyzt positions of the the sensor S and an XYZT unique point P we are looking
+  // to the two sensor positions the closest (temporarily speaking) to the point P. These two points
+  // must be before and after point P but  "before" and "after" may not exist in edge cases
+  double ti, tf;
+  int i, f;
 
-  // The sensor positions were already sorted a R level
-  // For each point find the first element that is not less than the time t of the points
-  // This give the closest position of the sensor after (t1) the aqcuisition of the points (t)
-  it = std::lower_bound(t.begin(), t.end(), T[k]);
+  // The sensor positions were already sorted by gpstime at R level
+  // For the input point, find the closest sensor position.
+  int ind = search_closest(t, T[k]);
 
-  // We now need the sensor position before (t0) the aqcuisition.
-
-  // If the sensor position is the first one: no sensor position exists before this one
-  // thus no interpolation possible. We use the next one.
-  if (it == t.begin())
+  // We need two sensor positions to perform an interpolation. The second closest sensor position
+  // is either the previous or the next one
+  if (ind == 0)
   {
-    j = 1;
+    i = 0;
+    f = 1;
   }
-  // If the sensor position not found: no sensor position exists after this one
-  // thus no interpolation possible. We use the last one.
-  else if (it == t.end())
+  else if (ind == x.size()-1)
   {
-    j = x.size() - 1;
+    i = x.size()-2;
+    f = x.size()-1;
   }
-  // If t1-t0 is too big it is two differents flightlines. We must hold this case by chosing
-  // if we use the previous point or this one.
-  else if (std::abs(*it - *(it-1)) > 30)
-  {
-    // If t is closer to the previous one
-    if (std::abs(T[k] - *(it-1)) < std::abs(T[k] - *(it+1)))
-      j = it - t.begin() - 1;
-    else
-      j = it - t.begin() + 1;
-  }
-  // General case with t1 > t > t0. We have a sensor position after the aquisition of the point
-  // and it is not the first one. So we necessarily have a previous one. We can make the
-  // interpolation
   else
   {
-    j = it - t.begin();
+    if (std::abs(T[k] - t[ind-1]) < std::abs(T[k] - t[ind+1]))
+    {
+      i = ind-1;
+      f = ind;
+    }
+    else
+    {
+      i = ind;
+      f = ind+1;
+    }
   }
 
-  if (j >= x.size()) throw Rcpp::exception("Internal error: access to coordinates beyond the limits of the array. Please report this bug.", false);
-  if (j <= 0)        throw Rcpp::exception("Internal error: access to coordinates below 0 in the array. Please report this bug.", false);
+  ti = t[i];
+  tf = t[f];
 
-  r  = 1 - (t[j]-T[k])/(t[j]-t[j-1]);
-  dx = X[k] - (x[j-1] + (x[j] - x[j-1])*r);
-  dy = Y[k] - (y[j-1] + (y[j] - y[j-1])*r);
-  dz = Z[k] - (z[j-1] + (z[j] - z[j-1])*r);
+  // Because of some edge cases such as a single available position for a given flightline
+  // the retained positions may come from two different flightlines. We must handle this case.
+  // The sole possibility (AFAIK) for the following to be true is if a flightline has a single
+  // sensor position (see #608). In this case there is no way to get two positions
+  if (tf - ti > 30)
+  {
+    i = ind;
+    f = ind;
+    ti = t[i];
+    tf = t[f];
+  }
 
-  R  = std::sqrt(dx*dx + dy*dy + dz*dz);
+  double r;
+  if (i == f)
+    r = 1;
+  else
+    r = 1 - (t[f]-T[k])/(t[f]-t[i]);
 
-  if (R > 3 * R_control)
+  double dx = X[k] - (x[i] + (x[f] - x[i])*r);
+  double dy = Y[k] - (y[i] + (y[f] - y[i])*r);
+  double dz = Z[k] - (z[i] + (z[f] - z[i])*r);
+
+  double R = std::sqrt(dx*dx + dy*dy + dz*dz);
+
+  if (sensor != TLS && R > 3 * R_control)
   {
     Rprintf("An high range R has been computed relatively to the expected average range Rm = %.0lf\n", R_control);
     Rprintf("Point number %d at (x,y,z,t) = (%.2lf, %.2lf, %.2lf, %.2lf)\n", k+1, X[k], Y[k], Z[k], T[k]);
-    Rprintf("Matched with sensor between (%.2lf, %.2lf, %.2lf, %.2lf) and (%.2lf, %.2lf, %.2lf, %.2lf)\n", x[j-1], y[j-1], z[j-1], t[j-1], x[j], y[j], z[j], t[j]);
-    Rprintf("The range computed was R = %.2lf\n", R, dx, dy, dz, t[j]);
+    Rprintf("Matched with sensor between (%.2lf, %.2lf, %.2lf, %.2lf) and (%.2lf, %.2lf, %.2lf, %.2lf)\n", x[i], y[i], z[i], t[i], x[f], y[f], z[f], t[f]);
+    Rprintf("The range computed was R = %.2lf\n", R);
     Rprintf("Check the correctness of the sensor positions and the correctness of the gpstime either in the point cloud or in the sensor positions.\n");
     throw Rcpp::exception("Unrealistic range: see message above", false);
   }
@@ -324,8 +377,9 @@ NumericVector LAS::compute_range(DataFrame flightlines)
   // Compute the median sensor elevation then average range for this sensor
   // elevation. This gives a rough idea of the expected range and allows for
   // detecting failure and bad computations
-  double median_z_sensor = Rcpp::median(z);
-  double R_control = mean(median_z_sensor - Z);
+  //double median_z_sensor = Rcpp::median(z);
+  //double R_control = mean(median_z_sensor - Z);
+  double R_control = DBL_MAX;
 
   NumericVector R(npoints);
 
@@ -344,11 +398,19 @@ NumericVector LAS::compute_range(DataFrame flightlines)
 
 void LAS::filter_local_maxima(NumericVector ws, double min_height, bool circular)
 {
+  char UKN = 0;
+  char NLM = 1;
+  char LMX = 2;
+
   bool abort = false;
   bool vws = ws.length() > 1;
 
   SpatialIndex tree(las);
   Progress pb(npoints, "Local maximum filter: ");
+
+  std::vector<char> state(npoints);
+  std::fill(state.begin(), state.end(), 0);
+  for (int i = 0 ; i < npoints ; i++) { if (Z[i] < min_height) state[i] = NLM; }
 
   #pragma omp parallel for num_threads(ncpu)
   for (unsigned int i = 0 ; i < npoints ; i++)
@@ -359,8 +421,7 @@ void LAS::filter_local_maxima(NumericVector ws, double min_height, bool circular
 
     double hws = (vws) ? ws[i]/2 : ws[0]/2;
 
-    if (Z[i] < min_height)
-      continue;
+    if (state[i] == NLM) continue;
 
     // Get the points within a windows centered on the current point
     std::vector<PointXYZ> pts;
@@ -389,7 +450,13 @@ void LAS::filter_local_maxima(NumericVector ws, double min_height, bool circular
       if(z > zmax)
       {
         is_lm = false;
-        break;
+      }
+
+      // If the windows size is fixed, then, if a point is below the central point
+      // we are sure it is not a LM
+      if (!vws && z < Z[i])
+      {
+        state[pt.id] = NLM;
       }
 
       // Found one equal. If this one was already tagged LM we can't have two lm
@@ -442,7 +509,7 @@ void LAS::filter_local_maxima(NumericVector ws)
   else
     Rcpp::stop("C++ unexpected internal error in 'filter_local_maxima': invalid windows."); // # nocov
 
-  SpatialIndex tree(las);
+  SpatialIndex tree(las, skip);
   Progress pb(npoints, "Local maximum filter: ");
 
   #pragma omp parallel for num_threads(ncpu)
@@ -451,6 +518,7 @@ void LAS::filter_local_maxima(NumericVector ws)
     if (abort) continue;
     if (pb.check_interrupt()) abort = true;
     pb.increment();
+    if (!skip[i]) continue;
 
     // Get the points within a windows centred on the current point
     std::vector<PointXYZ> pts;
@@ -501,15 +569,14 @@ void LAS::filter_local_maxima(NumericVector ws)
   return;
 }
 
-void LAS::filter_with_grid(S4 layout, bool max)
+void LAS::filter_with_grid(List layout, bool max)
 {
-  S4 extent   = layout.slot("extent");
-  int ncols   = layout.slot("ncols");
-  int nrows   = layout.slot("nrows");
-  double xmin = extent.slot("xmin");
-  double xmax = extent.slot("xmax");
-  double ymin = extent.slot("ymin");
-  double ymax = extent.slot("ymax");
+  int ncols   = layout["ncol"];
+  int nrows   = layout["nrow"];
+  double xmin = layout["xmin"];
+  double xmax = layout["xmax"];
+  double ymin = layout["ymin"];
+  double ymax = layout["ymax"];
   double xres = (xmax - xmin) / ncols;
   double yres = (ymax - ymin) / nrows;
   int limit = (max) ? std::numeric_limits<int>::min() : std::numeric_limits<int>::max();
@@ -519,7 +586,7 @@ void LAS::filter_with_grid(S4 layout, bool max)
 
   for (unsigned int i = 0 ; i < npoints ; i++)
   {
-    if (filter[i]) continue;
+    if (skip[i]) continue;
 
     double x = X[i];
     double y = Y[i];
@@ -559,81 +626,144 @@ void LAS::filter_with_grid(S4 layout, bool max)
   return;
 }
 
-void LAS::filter_in_polygon(std::string wkt)
+SEXP LAS::find_polygon_ids(Rcpp::List polygons, bool by_poly)
 {
-  typedef boost::geometry::model::point<double, 2, boost::geometry::cs::cartesian> Point;
-  typedef boost::geometry::model::polygon<Point> Polygon;
-  typedef boost::geometry::model::multi_polygon<Polygon> MultiPolygon;
-  typedef boost::geometry::model::box<Point> Bbox;
-
-  if (wkt.find("MULTIPOLYGON") != std::string::npos)
+  std::vector<std::vector<int>> res;
+  std::vector<int> poly_id;
+  if (by_poly)
   {
-    Point p;
-    Bbox bbox;
-    MultiPolygon polygons;
-
-    boost::geometry::read_wkt(wkt, polygons);
-    boost::geometry::envelope(polygons, bbox);
-
-    #pragma omp parallel for num_threads(ncpu)
-    for(unsigned int i = 0 ; i < npoints ; i++)
-    {
-      if (filter[i]) continue;
-
-      Point p;
-      p.set<0>(X[i]);
-      p.set<1>(Y[i]);
-
-      bool isin = false;
-
-      if (boost::geometry::covered_by(p, bbox))
-      {
-        if (boost::geometry::covered_by(p, polygons))
-          isin = true;
-      }
-
-      #pragma omp critical
-      {
-        filter[i] = isin;
-      }
-    }
+    res.resize(polygons.size());
   }
-  else if (wkt.find("POLYGON") != std::string::npos)
+  else
   {
-    Point p;
-    Bbox bbox;
-    Polygon polygon;
+    poly_id.resize(X.size());
+    std::fill(poly_id.begin(), poly_id.end(), NA_INTEGER);
+  }
 
-    boost::geometry::read_wkt(wkt, polygon);
-    boost::geometry::envelope(polygon, bbox);
+  if (polygons.size() == 0)
+    Rcpp::stop("0 size input");
 
-    #pragma omp parallel for num_threads(ncpu)
-    for(unsigned int i = 0 ; i < npoints ; i++)
+  if (polygons.size() == 1)
+  {
+    // "Stupid algo": test every point against the single polygon
+    Rcpp::List rings = polygons[0];
+
+    // Compute bounding box
+    double min_x = INFINITY, min_y = INFINITY;
+    double max_x = -INFINITY, max_y = -INFINITY;
+    for (int j = 0; j < rings.size(); j++)
     {
-      if (filter[i]) continue;
+      Rcpp::NumericMatrix ring = rings[j];
+      Rcpp::NumericVector x = ring(_, 0);
+      Rcpp::NumericVector y = ring(_, 1);
 
-      Point p;
-      p.set<0>(X[i]);
-      p.set<1>(Y[i]);
+      min_x = std::min(min_x, (double)min(x));
+      min_y = std::min(min_y, (double)min(y));
+      max_x = std::max(max_x, (double)max(x));
+      max_y = std::max(max_y, (double)max(y));
+    }
 
-      bool isin = false;
+    for (R_xlen_t pid = 0; pid < X.size(); pid++)
+    {
+      // Bounding box test
+      if (X[pid] < min_x || X[pid] > max_x || Y[pid] < min_y || Y[pid] > max_y)
+        continue;
 
-      if (boost::geometry::covered_by(p, bbox))
+      bool inpoly = false;
+
+      for (int j = 0; j < rings.size(); j++)
       {
-        if (boost::geometry::covered_by(p, polygon))
-          isin = true;
+        Rcpp::NumericMatrix ring = rings[j];
+        bool exterior_ring = ring(0, 2) == 1;
+        bool b = pnpoly(ring, X[pid], Y[pid]);
+
+        if (b)
+        {
+          if (exterior_ring)
+          {
+            inpoly = true;
+          }
+          else
+          {
+            inpoly = false;
+            break;
+          }
+        }
       }
 
-      #pragma omp critical
+      if (inpoly)
       {
-        filter[i] = isin;
+        if (by_poly)
+          res[0].push_back(pid + 1);
+        else
+          poly_id[pid] = 1;
       }
     }
   }
   else
-    Rcpp::stop("Unexpected error in point in polygon: WKT is not a POLYGON or MULTIPOLYGON"); // # nocov
+  {
+    // Usual algo with spatial index
+    GridPartition tree(las);
 
-  return;
+    for (unsigned int i = 0 ; i < polygons.size() ; i++)
+    {
+      Rcpp::List rings = polygons[i];
+
+      // Find bbox
+      double min_x = INFINITY, min_y = INFINITY;
+      double max_x = -INFINITY, max_y = -INFINITY;
+      for (int j = 0 ; j < rings.size() ; j++)
+      {
+        Rcpp::NumericMatrix ring = rings[j];
+        Rcpp::NumericVector x = ring(_, 0);
+        Rcpp::NumericVector y = ring(_, 1);
+
+        min_x = std::min(min_x, (double)min(x));
+        min_y = std::min(min_y, (double)min(y));
+        max_x = std::max(max_x, (double)max(x));
+        max_y = std::max(max_y, (double)max(y));
+      }
+
+      lidR::Rectangle rect(min_x, max_x, min_y, max_y);
+      std::vector<PointXYZ> pts;
+      tree.lookup(rect, pts);
+
+      for (unsigned int k = 0 ; k < pts.size() ; k++)
+      {
+        bool inpoly = false;
+        for (int j = 0 ; j < rings.size() ; j++)
+        {
+          Rcpp::NumericMatrix ring = rings[j];
+          bool exterior_ring = ring(0, 2) == 1;
+          bool b = pnpoly(ring, pts[k].x, pts[k].y);
+
+          if (b)
+          {
+            if (exterior_ring)
+              inpoly = true;
+            else
+            {
+              inpoly = false;
+              break;
+            }
+          }
+        }
+
+        if (inpoly)
+        {
+          if (by_poly)
+            res[i].push_back(pts[k].id + 1);
+          else
+            poly_id[pts[k].id] = i + 1;
+        }
+      }
+    }
+  }
+
+  if (by_poly)
+    return wrap(res);
+  else
+    return wrap(poly_id);
 }
 
 void LAS::filter_shape(int method, NumericVector th, int k)
@@ -642,14 +772,17 @@ void LAS::filter_shape(int method, NumericVector th, int k)
 
   bool abort = false;
 
-  SpatialIndex qtree(las, filter);
+  SpatialIndex qtree(las, skip);
 
   bool (*predicate)(arma::vec&, arma::mat&, NumericVector&);
   switch(method)
   {
-    case 1: predicate = &LAS::coplanar; break;
-    case 2: predicate = &LAS::hcoplanar; break;
-    case 3: predicate = &LAS::colinear; break;
+  case 1: predicate = &LAS::coplanar; break;
+  case 2: predicate = &LAS::hcoplanar; break;
+  case 3: predicate = &LAS::colinear; break;
+  case 4: predicate = &LAS::hcolinear; break;
+  case 5: predicate = &LAS::vcolinear; break;
+  default: Rcpp::stop("Internal error in LAS::filter_shape: invalid method") ; break; // # nocov
   }
 
   #pragma omp parallel for num_threads(ncpu)
@@ -658,7 +791,7 @@ void LAS::filter_shape(int method, NumericVector th, int k)
     if (abort) continue;
     if (pb.check_interrupt()) abort = true; // No data race here because only thread 0 can actually write
     pb.increment();
-    if (!filter[i]) continue;
+    if (!skip[i]) continue;
 
     arma::mat A(k,3);
     arma::mat coeff;  // Principle component matrix
@@ -702,10 +835,12 @@ void LAS::filter_progressive_morphology(NumericVector ws, NumericVector th)
 
     for (unsigned int j = 0 ; j < npoints ; j++)
     {
-      if (!filter[j]) continue;
-      filter[j] = (oldZ[j] - Z[j]) < th[i];
+      if (!skip[j]) continue;
+      skip[j] = (oldZ[j] - Z[j]) < th[i];
     }
   }
+
+  filter = skip;
 
   return;
 }
@@ -717,7 +852,7 @@ void LAS::filter_isolated_voxel(double res, unsigned int isolated)
   double zmin = min(Z);
   double xmax = max(X);
   double ymax = max(Y);
-  double zmax = max(Z);
+  //double zmax = max(Z);
 
   unsigned int width = std::floor((xmax - xmin) / res);
   unsigned int height = std::floor((ymax - ymin) / res);
@@ -1144,15 +1279,14 @@ IntegerVector LAS::segment_trees(double dt1, double dt2, double Zu, double R, do
   return idtree;
 }
 
-NumericVector LAS::rasterize(S4 layout, double subcircle, int method)
+NumericVector LAS::rasterize(List layout, double subcircle, int method)
 {
-  S4 extent   = layout.slot("extent");
-  int ncols   = layout.slot("ncols");
-  int nrows   = layout.slot("nrows");
-  double xmin = extent.slot("xmin");
-  double xmax = extent.slot("xmax");
-  double ymin = extent.slot("ymin");
-  double ymax = extent.slot("ymax");
+  int ncols   = layout["ncol"];
+  int nrows   = layout["nrow"];
+  double xmin = layout["xmin"];
+  double xmax = layout["xmax"];
+  double ymin = layout["ymin"];
+  double ymax = layout["ymax"];
   double xres = (xmax - xmin) / ncols;
   double yres = (ymax - ymin) / nrows;
 
@@ -1187,24 +1321,24 @@ NumericVector LAS::rasterize(S4 layout, double subcircle, int method)
         if (y == ymin) row = nrows-1;
         if (x == xmax) col = ncols-1;
 
-        if (row < 0 || row >= nrows || col < 0 || col >= ncols)
-          Rcpp::stop("C++ unexpected internal error in 'rasterize': point out of raster."); // # nocov
+        if (!(row < 0 || row >= nrows || col < 0 || col >= ncols))
+        {
+          int cell = row * ncols + col;
+          raster(cell) = f(raster(cell), z);
 
-        int cell = row * ncols + col;
-        raster(cell) = f(raster(cell), z);
-
-        // This is a hack for R 4.0.0 with alternative compiler toolchain (gcc8 32 bits)
-        // I'm not able to understand why adding a print line fixes the problem
-        // and I don't even know what is the problem.
-        #ifdef _WIN32
-        #ifdef __MINGW32__
-        #ifdef __GNUC__
-        #if __GNUC__ >= 8
-                if (cell == raster.size() + 1) Rprintf("x = %lf, y = %lf\n", x, y);
-        #endif
-        #endif
-        #endif
-        #endif
+          // This is a hack for R 4.0.0 with alternative compiler toolchain (gcc8 32 bits)
+          // I'm not able to understand why adding a print line fixes the problem
+          // and I don't even know what is the problem.
+          #ifdef _WIN32
+          #ifdef __MINGW32__
+          #ifdef __GNUC__
+          #if __GNUC__ >= 8
+          if (cell == raster.size() + 1) Rprintf("x = %lf, y = %lf\n", x, y);
+          #endif
+          #endif
+          #endif
+          #endif
+        }
       }
     }
   }
@@ -1221,28 +1355,23 @@ NumericVector LAS::rasterize(S4 layout, double subcircle, int method)
       if (y == ymin) row = nrows-1;
       if (x == xmax) col = ncols-1;
 
-      if (row < 0 || row >= nrows || col < 0 || col >= ncols)
-        Rcpp::stop("C++ unexpected internal error in 'rasterize': point out of raster."); // # nocov
-
-      int cell = row * ncols + col;
-      raster(cell) = f(raster(cell), z);
+      if (!(row < 0 || row >= nrows || col < 0 || col >= ncols))
+      {
+        int cell = row * ncols + col;
+        raster(cell) = f(raster(cell), z);
+      }
     }
   }
 
   return raster;
 }
 
-List LAS::point_metrics(unsigned int k, double r, DataFrame data, int nalloc, SEXP call, SEXP env)
+DataFrame LAS::fast_eigen_decomposition(int k, double r, bool get_coef)
 {
-  // @k is the k of knn
-  // @r is the radius
-  // @data contains all the attributes of the LAS object so we are capable
-  //       of copying the value in temporary memory
-  // @n is the length of the vectors initially allocated to store the neighborhood
-  // @call is the user-defined expression to apply on each neighborhood
-  // @env is the environnement where Rf_eval eval the call
+  int n = npoints;
+  k = std::min(k, n);
+  double rsq = r*r;
 
-  // Are we searching the k nearest neiborhood or a sphere neighborhood or both?
   int mode = 0;
   if (k == 0 && r > 0)
     mode = 1;
@@ -1253,237 +1382,297 @@ List LAS::point_metrics(unsigned int k, double r, DataFrame data, int nalloc, SE
   else
     Rcpp::stop("Internal error: invalid argument k or r");
 
-  // Do we need to manage dynamic memory? Yes if not pure knn
-  bool dynamic_memory_realloc = mode > 0;
+  NumericVector eigen_largest(n);
+  NumericVector eigen_medium(n);
+  NumericVector eigen_smallest(n);
+  NumericVector coeff0;
+  NumericVector coeff1;
+  NumericVector coeff2;
+  NumericVector coeff3;
+  NumericVector coeff4;
+  NumericVector coeff5;
+  NumericVector coeff6;
+  NumericVector coeff7;
+  NumericVector coeff8;
 
-  // Create an Rcpp object to handle the SEXP easily otherwise we have to use R's C API...
-  Rcpp::Environment callenv = as<Rcpp::Environment>(env);
-
-  // Retrieve the names of the attributes
-  std::vector<std::string> names = as<std::vector<std::string> >(data.names());
-
-  // Need some iterator to loop on the List columns
-  Rcpp::List::iterator it1;
-  Rcpp::List::iterator it2;
-  std::vector<std::string>::iterator it3;
-
-  // Need a physical List to handle a reference to the data of the environement 'env'.
-  // Not mandatory stricly speaking but easier to handle this stuff with Rcpp than R's C API
-  List proxy;
-
-  // We populate the environement by creating new vector of size nalloc binded to
-  // the original names in the LAS object + a shallow copy in the List 'proxy'.
-  it3 = names.begin();
-  for (it1 = data.begin() ; it1 != data.end() ; ++it1)
+  if (get_coef)
   {
-    switch( TYPEOF(*it1) )
-    {
-      case REALSXP: {
-        Rcpp::NumericVector tmp(nalloc);
-        proxy.push_back(tmp);
-        callenv.assign(*it3, tmp);
-        break;
-      }
-      case INTSXP: {
-        Rcpp::IntegerVector tmp(nalloc);
-        proxy.push_back(tmp);
-        callenv.assign(*it3, tmp);
-        break;
-      }
-      case LGLSXP: {
-        Rcpp::LogicalVector tmp(nalloc);
-        proxy.push_back(tmp);
-        callenv.assign(*it3, tmp);
-        break;
-      }
-      default: {
-        Rcpp::stop("Incompatible type encountered: integer, double and bool are the only supported types.");
-      }
-    }
-
-    ++it3;
+    coeff0 = NumericVector(n);
+    coeff1 = NumericVector(n);
+    coeff2 = NumericVector(n);
+    coeff3 = NumericVector(n);
+    coeff4 = NumericVector(n);
+    coeff5 = NumericVector(n);
+    coeff6 = NumericVector(n);
+    coeff7 = NumericVector(n);
+    coeff8 = NumericVector(n);
   }
 
-  // Number of points actually processed considering the filter.
-  // The output is allocated using this number
-  int nprocessed = std::count(filter.begin(), filter.end(), true);
-  List output(nprocessed);
-
-  // Current index in the output
-  int j = 0;
-
-  // Construction of a spatial index to make the queries
-  SpatialIndex tree(las, filter);
-  Progress pb(npoints, "Metrics computation: ");
-
-  // Error handling variables
   bool abort = false;
-  int pOutError = 0;
 
-  // This is the size of memory used to store the neighborhood
-  unsigned int si = nalloc; // initially allocated
-  unsigned int sc = si;     // current
-  unsigned int sn = si;     // new
+  DataFrame df = as<DataFrame>(las.slot("data"));
+  DataFrameAdaptor adaptor(df, {"X", "Y", "Z"});
+  KDTree tree = KDTree(3, adaptor, nanoflann::KDTreeSingleIndexAdaptorParams(10));
+  tree.buildIndex();
 
-  if (!dynamic_memory_realloc && si != k) Rcpp::stop("Internal error: k elements should have been allocated.");
+  Progress pb(npoints, "Eigen decomposition: ");
 
-  //Rprintf("Memory allocated to store the neighborhood: %d\n", si);
-
-  // Loop through each points
-  for(unsigned int i = 0 ; i < npoints ; ++i)
+  #pragma omp parallel for num_threads(ncpu)
+  for (unsigned int i = 0 ; i < npoints ; i++)
   {
     if (abort) continue;
     if (pb.check_interrupt()) abort = true;
     pb.increment();
-    if (!filter[i]) continue;
 
-    std::vector<PointXYZ> pts;
+    double p[3] = { X[i], Y[i], Z[i] };
 
-    if (mode == 0)
+    std::vector<uint32_t> indices;
+    std::vector<KDTree::DistanceType> dists;
+
+    switch (mode)
     {
-      // Query the knn neighborhood
-      PointXYZ p(X[i], Y[i], Z[i]);
-      tree.knn(p, k, pts);
-
-      // No need to reallocate the memory because it is always of size k
-    }
-    else
-    {
-      if (mode == 1)
+      case 2:
       {
-        // Query the sphere neighborhood
-        Sphere sp(X[i], Y[i], Z[i], r);
-        tree.lookup(sp, pts);
-      }
-      else
-      {
-        // Query the knn + sphere limit
-        PointXYZ p(X[i], Y[i], Z[i]);
-        tree.knn(p, k, r, pts);
-      }
+        // ---- KNN with radius cap ----
+        std::vector<uint32_t> tmp_idx(k);
+        std::vector<KDTree::DistanceType> tmp_dist(k);
 
-      // This is the new size of the memory used to store the neighborhood
-      sn = pts.size();
-
-      // If we have found more points in the neighborhood than we have memory allocated: we need
-      // to resize the memory. We resize x2 so we are sure that will occur only one or two times.
-      if (sn > si)
-      {
-        si = (sn < 2*si) ? 2*si : sn;
-        //Rprintf("Realloc from %d to %d at point %d because neigborhood of size %d\n", nalloc, si, i, sn);
-        nalloc = si;
-        sc = sn;
-        proxy = List::create();
-
-        it3 = names.begin();
-        for (it1 = data.begin() ; it1 != data.end() ; ++it1)
+        size_t found = tree.knnSearch(p, k, tmp_idx.data(), tmp_dist.data());
+        for (size_t j = 0; j < found; j++)
         {
-          switch( TYPEOF(*it1) )
-          {
-            case REALSXP: {
-              Rcpp::NumericVector tmp(nalloc);
-              proxy.push_back(tmp);
-              callenv.assign(*it3, tmp);
-              SETLENGTH(wrap(tmp), sc);
-              break;
-            }
-            case INTSXP: {
-              Rcpp::IntegerVector tmp(nalloc);
-              proxy.push_back(tmp);
-              callenv.assign(*it3, tmp);
-              SETLENGTH(wrap(tmp), sc);
-              break;
-            }
-            case LGLSXP: {
-              Rcpp::LogicalVector tmp(nalloc);
-              proxy.push_back(tmp);
-              callenv.assign(*it3, tmp);
-              SETLENGTH(wrap(tmp), sc);
-              break;
-            }
-            default: {
-              Rcpp::stop("Incompatible SEXP encountered; only accepts DataFrame with REALSXPs, INTSXPs and LGLSXPs"); // # nocov
-            }
-          }
-
-          ++it3;
+          if (tmp_dist[j] <= rsq)
+            indices.push_back(tmp_idx[j]);
         }
-
+        break;
       }
-      // If we have found less points in the neighborhood than we have memory allocated: resize memory
-      else
+      case 0:
       {
-        sc = sn;
-        for (it1 = proxy.begin() ; it1 != proxy.end() ; ++it1)
-          SETLENGTH(*it1, sc);
+        // ---- Pure KNN ----
+        indices.resize(k);
+        dists.resize(k);
+        tree.knnSearch(p, k, indices.data(), dists.data());
+        break;
+      }
+      case 1:
+      {
+        // ---- Pure Radius ----
+        std::vector<nanoflann::ResultItem<uint32_t, KDTree::DistanceType>> matches;
+        tree.radiusSearch(p, rsq+EPSILON, matches);
+
+        for (const auto& m : matches)
+          indices.push_back(m.first);
+
+        break;
       }
     }
 
+    // build matrix A
+    arma::mat A(indices.size(), 3);
+    arma::mat coeff;  // Principle component matrix
+    arma::mat score;
+    arma::vec latent; // Eigenvalues in descending order
 
-    // At this stage the environnment env should contains vectors named like into the LAS
-    // object and these vector are longer or equal to the number of points in the neihborhood.
-    // But at the R level they are of the good lenght because we used SETLENGTH.
-    it2 = proxy.begin();
-    for (it1 = data.begin() ; it1 != data.end() ; ++it1)
+    for (size_t j = 0; j < indices.size(); j++)
     {
-      switch( TYPEOF(*it1) )
-      {
-        case REALSXP: {
-          Rcpp::NumericVector tmp1 = Rcpp::as<Rcpp::NumericVector>(*it1);
-          Rcpp::NumericVector tmp2 = Rcpp::as<Rcpp::NumericVector>(*it2);
-          for(unsigned int i = 0 ; i < sc ; ++i) tmp2[i] = tmp1[pts[i].id];
-          break;
-        }
-        case INTSXP: {
-          Rcpp::IntegerVector tmp1 = Rcpp::as<Rcpp::IntegerVector>(*it1);
-          Rcpp::IntegerVector tmp2 = Rcpp::as<Rcpp::IntegerVector>(*it2);
-          for(unsigned int i = 0 ; i < sc ; ++i) tmp2[i] = tmp1[pts[i].id];
-          break;
-        }
-        case LGLSXP: {
-          Rcpp::LogicalVector tmp1 = Rcpp::as<Rcpp::LogicalVector>(*it1);
-          Rcpp::LogicalVector tmp2 = Rcpp::as<Rcpp::LogicalVector>(*it2);
-          for(unsigned int i = 0 ; i < sc ; ++i) tmp2[i] = tmp1[pts[i].id];
-          break;
-        }
-        default: {
-          Rcpp::stop("Incompatible SEXP encountered; only accepts DataFrame with REALSXPs, INTSXPs and LGLSXPs"); // # nocov
-        }
-      }
-
-      ++it2; ++it3;
+      A(j,0) = X[indices[j]];
+      A(j,1) = Y[indices[j]];
+      A(j,2) = Z[indices[j]];
     }
 
-    output[j] = R_tryEvalSilent(call, env, &pOutError);
+    arma::princomp(coeff, score, latent, A);
 
-    if (pOutError == 1)
+    eigen_largest[i] = latent[0];
+    eigen_medium[i] = latent[1];
+    eigen_smallest[i] = latent[2];
+
+    if (get_coef)
     {
-      // Restore the TRUELENGTH otherwise memory leak
-      if (dynamic_memory_realloc)
-      {
-        for (it1 = proxy.begin() ; it1 != proxy.end() ; ++it1)
-          SETLENGTH(*it1, si);
-      }
-
-      throw Rcpp::exception(R_curErrorBuf(), false);
+      coeff0[i] = coeff(0,0);
+      coeff1[i] = coeff(0,1);
+      coeff2[i] = coeff(0,2);
+      coeff3[i] = coeff(1,0);
+      coeff4[i] = coeff(1,1);
+      coeff5[i] = coeff(1,2);
+      coeff6[i] = coeff(2,0);
+      coeff7[i] = coeff(2,1);
+      coeff8[i] = coeff(2,2);
     }
-
-    j++;
   }
 
-  // Restore the TRUELENGTH otherwise memory leak
-  if (dynamic_memory_realloc)
+  DataFrame out;
+  out.push_back(eigen_largest, "eigen_largest");
+  out.push_back(eigen_medium, "eigen_medium");
+  out.push_back(eigen_smallest, "eigen_smallest");
+
+  if (get_coef)
   {
-    for (it1 = proxy.begin() ; it1 != proxy.end() ; ++it1)
-      SETLENGTH(*it1, si);
+    out.push_back(coeff0, "coeff00");
+    out.push_back(coeff1, "coeff01");
+    out.push_back(coeff2, "coeff02");
+    out.push_back(coeff3, "coeff10");
+    out.push_back(coeff4, "coeff11");
+    out.push_back(coeff5, "coeff12");
+    out.push_back(coeff6, "coeff20");
+    out.push_back(coeff7, "coeff21");
+    out.push_back(coeff8, "coeff22");
   }
 
-  return output;
+  return out;
 }
 
-NumericVector LAS::fast_knn_metrics(unsigned int k, IntegerVector metrics)
+
+DataFrame LAS::eigen_decomposition(int k, double r, bool get_coef)
 {
-  Progress pb(npoints, "Metrics computation: ");
+  int n = std::count(skip.begin(), skip.end(), true);
+  IntegerVector pointID(n);
+
+  NumericVector eigen_largest(n);
+  NumericVector eigen_medium(n);
+  NumericVector eigen_smallest(n);
+  NumericVector coeff0;
+  NumericVector coeff1;
+  NumericVector coeff2;
+  NumericVector coeff3;
+  NumericVector coeff4;
+  NumericVector coeff5;
+  NumericVector coeff6;
+  NumericVector coeff7;
+  NumericVector coeff8;
+
+  if (get_coef)
+  {
+    coeff0 = NumericVector(n);
+    coeff1 = NumericVector(n);
+    coeff2 = NumericVector(n);
+    coeff3 = NumericVector(n);
+    coeff4 = NumericVector(n);
+    coeff5 = NumericVector(n);
+    coeff6 = NumericVector(n);
+    coeff7 = NumericVector(n);
+    coeff8 = NumericVector(n);
+  }
+
+  bool abort = false;
+  unsigned int j = 0;
+
+  int mode = 0;
+  if (k == 0 && r > 0)
+    mode = 1;
+  else if (k > 0 && r == 0)
+    mode = 0;
+  else if (k > 0 && r > 0)
+    mode = 2;
+  else
+    Rcpp::stop("Internal error: invalid argument k or r");
+
+  SpatialIndex index(las, skip);
+  Progress pb(npoints, "Eigen decomposition: ");
+
+
+  #pragma omp parallel for num_threads(ncpu)
+  for (unsigned int i = 0 ; i < npoints ; i++)
+  {
+    if (abort) continue;
+    if (pb.check_interrupt()) abort = true;
+    pb.increment();
+    if (!skip[i]) continue;
+
+    PointXYZ p(X[i], Y[i], Z[i]);
+
+    std::vector<PointXYZ> pts;
+    switch (mode)
+    {
+      case 0:
+      {
+        index.knn(p, k, pts);
+        break;
+      }
+
+      case 1:
+      {
+        Sphere sp(p.x, p.y, p.z, r);
+        index.lookup(sp, pts);
+        break;
+      }
+
+      case 2:
+      {
+        index.knn(p, k, r, pts);
+        break;
+      }
+
+      default:
+      {
+        Rcpp::stop("Internal error in LAS::eigen_decomposition: invalid search mode");
+        break;
+      }
+    }
+
+    arma::mat A(pts.size(),3);
+    arma::mat coeff;  // Principle component matrix
+    arma::mat score;
+    arma::vec latent; // Eigenvalues in descending order
+
+    for (unsigned int k = 0 ; k < pts.size() ; k++)
+    {
+      A(k,0) = pts[k].x;
+      A(k,1) = pts[k].y;
+      A(k,2) = pts[k].z;
+    }
+
+    arma::princomp(coeff, score, latent, A);
+
+    #pragma omp critical
+    {
+      pointID[j] = i;
+
+      eigen_largest[j] = latent[0];
+      eigen_medium[j] = latent[1];
+      eigen_smallest[j] = latent[2];
+
+      if (get_coef)
+      {
+        coeff0[j] = coeff(0,0);
+        coeff1[j] = coeff(0,1);
+        coeff2[j] = coeff(0,2);
+        coeff3[j] = coeff(1,0);
+        coeff4[j] = coeff(1,1);
+        coeff5[j] = coeff(1,2);
+        coeff6[j] = coeff(2,0);
+        coeff7[j] = coeff(2,1);
+        coeff8[j] = coeff(2,2);
+      }
+
+      j++;
+    }
+  }
+
+  DataFrame out;
+  out.push_back(pointID+1, "pointID");
+  out.push_back(eigen_largest, "eigen_largest");
+  out.push_back(eigen_medium, "eigen_medium");
+  out.push_back(eigen_smallest, "eigen_smallest");
+
+  if (get_coef)
+  {
+    out.push_back(coeff0, "coeff00");
+    out.push_back(coeff1, "coeff01");
+    out.push_back(coeff2, "coeff02");
+    out.push_back(coeff3, "coeff10");
+    out.push_back(coeff4, "coeff11");
+    out.push_back(coeff5, "coeff12");
+    out.push_back(coeff6, "coeff20");
+    out.push_back(coeff7, "coeff21");
+    out.push_back(coeff8, "coeff22");
+  }
+
+  return out;
+}
+
+
+NumericVector LAS::knn_distance(unsigned int k)
+{
+  Progress pb(npoints, "knn distance: ");
 
   bool abort = false;
 
@@ -1511,10 +1700,7 @@ NumericVector LAS::fast_knn_metrics(unsigned int k, IntegerVector metrics)
       dmean += d;
     }
 
-    #pragma omp critical
-    {
-      out(i) = dmean/(double)(k-1);
-    }
+    out(i) = dmean/(double)(k-1);
   }
 
   if (abort) throw Rcpp::internal::InterruptedException();
@@ -1577,5 +1763,33 @@ NumericVector LAS::interpolate_knnidw(NumericVector x, NumericVector y, int k, d
   if (abort) throw Rcpp::internal::InterruptedException();
 
   return iZ;
+}
+
+
+long LAS::search_closest(const Rcpp::NumericVector& sorted_array, double x) {
+
+  auto iter_geq = std::lower_bound(
+    sorted_array.begin(),
+    sorted_array.end(),
+    x
+  );
+
+  if (iter_geq == sorted_array.begin()) {
+    return 0;
+  }
+
+  if (iter_geq == sorted_array.end()) {
+    return sorted_array.size() - 1;
+  }
+
+  double a = *(iter_geq - 1);
+  double b = *(iter_geq);
+
+  if (fabs(x - a) < fabs(x - b)) {
+    return iter_geq - sorted_array.begin() - 1;
+  }
+
+  return iter_geq - sorted_array.begin();
+
 }
 

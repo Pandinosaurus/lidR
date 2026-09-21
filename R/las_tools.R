@@ -1,7 +1,7 @@
 #' LAS utilities
 #'
 #' Tools to manipulate LAS objects maintaining compliance with
-#' \href{https://www.asprs.org/wp-content/uploads/2019/07/LAS_1_4_r15.pdf}{ASPRS specification}
+#' \href{https://community.asprs.org/leadership-restricted/leadership-content/public-documents/standards}{ASPRS specification}
 #'
 #' In the specification of the LAS format the coordinates are expected to be given
 #' with a certain precision e.g. 0.01 for a millimeter precision (or millifeet), meaning
@@ -56,6 +56,7 @@
 #' # new scales and offsets according to LAS specification
 #' las <- las_rescale(las, xscale = 0.01, yscale = 0.01)
 #' las <- las_reoffset(las, xoffset = 300000, yoffset = 5248000)
+#' @return A LAS object, a vector or NULL if used for side effect of updating in place
 #' @rdname las_utilities
 #' @name las_utilities
 #' @family las utilities
@@ -66,9 +67,9 @@ NULL
 #' @rdname las_utilities
 las_rescale = function(las, xscale, yscale, zscale)
 {
-  xoffset <- las@header@PHB[["X offset"]]
-  yoffset <- las@header@PHB[["Y offset"]]
-  zoffset <- las@header@PHB[["Z offset"]]
+  xoffset <- las[["X offset"]]
+  yoffset <- las[["Y offset"]]
+  zoffset <- las[["Z offset"]]
 
   if (!missing(xscale))
   {
@@ -108,13 +109,13 @@ las_rescale = function(las, xscale, yscale, zscale)
 #' @export
 las_reoffset = function(las, xoffset, yoffset, zoffset)
 {
-  xscale  <- las@header@PHB[["X scale factor"]]
-  yscale  <- las@header@PHB[["Y scale factor"]]
-  zscale  <- las@header@PHB[["Z scale factor"]]
+  xscale  <- las[["X scale factor"]]
+  yscale  <- las[["Y scale factor"]]
+  zscale  <- las[["Z scale factor"]]
 
-  xrange  <- c(las@header@PHB[["Min X"]], las@header@PHB[["Max X"]])
-  yrange  <- c(las@header@PHB[["Min Y"]], las@header@PHB[["Max Y"]])
-  zrange  <- c(las@header@PHB[["Min Z"]], las@header@PHB[["Max Z"]])
+  xrange  <- c(las[["Min X"]], las[["Max X"]])
+  yrange  <- c(las[["Min Y"]], las[["Max Y"]])
+  zrange  <- c(las[["Min Z"]], las[["Max Z"]])
 
   if (!missing(xoffset))
   {
@@ -166,12 +167,12 @@ las_reoffset = function(las, xoffset, yoffset, zoffset)
 #' @rdname las_utilities
 las_quantize = function(las, by_reference = TRUE)
 {
-  xscale <- las@header@PHB[["X scale factor"]]
-  yscale <- las@header@PHB[["Y scale factor"]]
-  zscale <- las@header@PHB[["Z scale factor"]]
-  xoffset <- las@header@PHB[["X offset"]]
-  yoffset <- las@header@PHB[["Y offset"]]
-  zoffset <- las@header@PHB[["Z offset"]]
+  xscale <- las[["X scale factor"]]
+  yscale <- las[["Y scale factor"]]
+  zscale <- las[["Z scale factor"]]
+  xoffset <- las[["X offset"]]
+  yoffset <- las[["Y offset"]]
+  zoffset <- las[["Z offset"]]
 
   if (isTRUE(by_reference))
   {
@@ -199,10 +200,6 @@ las_update = function(las)
   new_header <- rlas::header_update(header, las@data)
   new_header <- LASheader(new_header)
   las@header <- new_header
-  las@bbox[1,1] <- new_header@PHB[["Min X"]]
-  las@bbox[1,2] <- new_header@PHB[["Max X"]]
-  las@bbox[2,1] <- new_header@PHB[["Min Y"]]
-  las@bbox[2,2] <- new_header@PHB[["Max Y"]]
   return(las)
 }
 
@@ -210,9 +207,9 @@ las_update = function(las)
 #' @rdname las_utilities
 quantize = function(x, scale, offset, by_reference = TRUE, ...)
 {
-  umin = min(x)
-  umax = max(x)
-  urange = storable_coordinate_range(scale, offset)
+  umin <- min(x)
+  umax <- max(x)
+  urange <- storable_coordinate_range(scale, offset)
 
   if (umax > urange[2] | umin < urange[1])
     stop("'x' contains unquantizable values out of the storable range.", call. = FALSE)
@@ -263,5 +260,50 @@ storable_coordinate_range <- function(scale, offset) {
   return(c("min" = storable_min, "max" = storable_max))
 }
 
+#' @export
+#' @rdname las_utilities
+header <- function(las)
+{
+  return(las@header)
+}
+
+#' @export
+#' @rdname las_utilities
+payload <- function(las)
+{
+  return(las@data)
+}
+#' @export
+#' @rdname las_utilities
+phb <- function(las)
+{
+  if (!is(las, "LASheader"))
+    las <- header(las)
+
+  return(las@PHB)
+}
+
+#' @export
+#' @rdname las_utilities
+vlr <- function(las)
+{
+  if (!is(las, "LASheader"))
+    las <- header(las)
+
+  return(las@VLR)
+}
+
+#' @export
+#' @rdname las_utilities
+evlr <- function(las)
+{
+  if (!is(las, "LASheader"))
+    las <- header(las)
+
+  if (!methods::.hasSlot(las, "EVLR"))
+    return(NULL)
+
+  return(las@EVLR)
+}
 
 lasupdateheader = las_update

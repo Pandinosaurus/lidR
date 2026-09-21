@@ -47,7 +47,7 @@ assert_are_same_length = function(x, y)
 assert_all_are_existing_files = function(x)
 {
   x. <- lazyeval::expr_text(x)
-  if (!all(file.exists(x)))
+  if (!all(file_exists(x)))
     stop(glue::glue("File does not exist."), call. = FALSE)
 }
 
@@ -130,8 +130,11 @@ assert_is_function = function(x)
 
 assert_all_are_same_crs = function(x)
 {
-  if (!sp::identicalCRS(x))
-    stop("Different CRS.", call. = FALSE)
+  ref = x[[1]]
+  lapply(x, function(x) {
+    if (st_crs(x) != st_crs(ref))
+      stop("Different CRS.", call. = FALSE)
+  })
 }
 
 assert_is_algorithm = function(x)

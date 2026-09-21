@@ -6,27 +6,17 @@ test_that("read*LAS work", {
 
   las = readLAS(LASfile)
 
-  expect_equal(las@index$sensor, 0L)
+  expect_equal(las@index$sensor, lidR:::ALSLAS)
   expect_equal(las@index$index, 0L)
 
   las = readALSLAS(LASfile)
 
-  expect_equal(las@index$sensor, 1L)
+  expect_equal(las@index$sensor, lidR:::ALSLAS)
   expect_equal(las@index$index, 0L)
 
   las = readTLSLAS(LASfile)
 
-  expect_equal(las@index$sensor, 2L)
-  expect_equal(las@index$index, 0L)
-
-  las = readUAVLAS(LASfile)
-
-  expect_equal(las@index$sensor, 3L)
-  expect_equal(las@index$index, 0L)
-
-  las = readDAPLAS(LASfile)
-
-  expect_equal(las@index$sensor, 4L)
+  expect_equal(las@index$sensor, lidR:::TLSLAS)
   expect_equal(las@index$index, 0L)
 })
 
@@ -34,27 +24,17 @@ test_that("read*LAScatalog work", {
 
   las = readLAScatalog(LASfile)
 
-  expect_equal(las@index$sensor, 0L)
+  expect_equal(las@index$sensor, lidR:::ALSLAS)
   expect_equal(las@index$index, 0L)
 
   las = readALSLAScatalog(LASfile)
 
-  expect_equal(las@index$sensor, 1L)
+  expect_equal(las@index$sensor, lidR:::ALSLAS)
   expect_equal(las@index$index, 0L)
 
   las = readTLSLAScatalog(LASfile)
 
-  expect_equal(las@index$sensor, 2L)
-  expect_equal(las@index$index, 0L)
-
-  las = readUAVLAScatalog(LASfile)
-
-  expect_equal(las@index$sensor, 3L)
-  expect_equal(las@index$index, 0L)
-
-  las = readDAPLAScatalog(LASfile)
-
-  expect_equal(las@index$sensor, 4L)
+  expect_equal(las@index$sensor, lidR:::TLSLAS)
   expect_equal(las@index$index, 0L)
 })
 
@@ -81,15 +61,15 @@ test_that("sensor works", {
 
   las = readLAS(LASfile)
 
-  expect_equal(sensor(las), 0L)
+  expect_equal(sensor(las),lidR:::ALSLAS)
 
-  sensor(las) <- 2
+  sensor(las) <- lidR:::TLSLAS
 
-  expect_equal(sensor(las), 2L)
+  expect_equal(sensor(las), lidR:::TLSLAS)
 
   sensor(las) <- "tls"
 
-  expect_equal(sensor(las), 2L)
+  expect_equal(sensor(las), lidR:::TLSLAS)
   expect_equal(sensor(las, h = TRUE), "TLS")
 
   expect_error(sensor(las) <- "plop")
@@ -162,7 +142,7 @@ las = LAS(D)
 
 test_that("circle lookup works for each spatial index", {
 
-  for(index in 0:4)
+  for(index in 0:3)
   {
     index(las) <- index
 
@@ -183,7 +163,7 @@ test_that("circle lookup works for each spatial index", {
 
 test_that("oriented rectangle lookup works for each spatial index", {
 
-  for(index in 0:4)
+  for(index in 0:3)
   {
     index(las) <- index
 
@@ -202,7 +182,7 @@ test_that("oriented rectangle lookup works for each spatial index", {
 
 test_that("knn in 2d works for each spatial indexes", {
 
-  for(index in 0:4)
+  for(index in 0:3)
   {
     index(las) <- index
 
@@ -219,7 +199,7 @@ test_that("knn in 2d works for each spatial indexes", {
 
 test_that("knn in 3d works for each spatial indexes", {
 
-  for(index in 0:4)
+  for(index in 0:3)
   {
     index(las) <- index
 
@@ -248,8 +228,8 @@ test_that("Spatial indexes work with more points (coverage)", {
   y = runif(1, 10, 900)
   z = runif(1, 1, 19)
 
-  u = vector("list", 4)
-  for(index in 0:4)
+  u = vector("list", 3)
+  for(index in 0:3)
   {
     index(las) <- index
     id = lidR:::C_knn3d_lookup(las, x,y,z,10)
@@ -258,8 +238,8 @@ test_that("Spatial indexes work with more points (coverage)", {
 
   expect_true(all(sapply(u, identical, u[[1]])))
 
-  u = vector("list", 4)
-  for(index in 0:4)
+  u = vector("list", 3)
+  for(index in 0:3)
   {
     index(las) <- index
     id = lidR:::C_circle_lookup(las, x, y, 5)
@@ -278,8 +258,8 @@ test_that("Spatial indexes work with 0 point", {
   y = runif(1, 10, 900)
   z = runif(1, 1, 19)
 
-  u = vector("list", 4)
-  for(index in 0:4)
+  u = vector("list", 3)
+  for(index in 0:3)
   {
     index(las) <- index
     id = lidR:::C_knn3d_lookup(las, x, y, z,10)
@@ -288,8 +268,8 @@ test_that("Spatial indexes work with 0 point", {
 
   expect_true(all(sapply(u, identical, integer(0))))
 
-  u = vector("list", 4)
-  for(index in 0:4)
+  u = vector("list", 3)
+  for(index in 0:3)
   {
     index(las) <- index
     id = lidR:::C_circle_lookup(las, x, y, 5)
@@ -308,8 +288,8 @@ test_that("Spatial indexes work with 1 point", {
   y = runif(1, 10, 11)
   z = runif(1, 1, 19)
 
-  u = vector("list", 4)
-  for(index in 0:4)
+  u = vector("list", 3)
+  for(index in 0:3)
   {
     index(las) <- index
     id = lidR:::C_knn3d_lookup(las, x, y, z, 10)
@@ -318,8 +298,8 @@ test_that("Spatial indexes work with 1 point", {
 
   expect_true(all(sapply(u, identical, 1L)))
 
-  u = vector("list", 4)
-  for(index in 0:4)
+  u = vector("list", 3)
+  for(index in 0:3)
   {
     index(las) <- index
     id = lidR:::C_circle_lookup(las, x, y, 5)
@@ -338,8 +318,8 @@ test_that("Spatial indexes work no point to find", {
   y = -100
   z = 0
 
-  u = vector("list", 4)
-  for(index in 0:4)
+  u = vector("list", 3)
+  for(index in 0:3)
   {
     index(las) <- index
     id = lidR:::C_circle_lookup(las, x, y, 5)

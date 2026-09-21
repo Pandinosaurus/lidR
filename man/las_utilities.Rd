@@ -10,6 +10,11 @@
 \alias{is.quantized}
 \alias{count_not_quantized}
 \alias{storable_coordinate_range}
+\alias{header}
+\alias{payload}
+\alias{phb}
+\alias{vlr}
+\alias{evlr}
 \title{LAS utilities}
 \usage{
 las_rescale(las, xscale, yscale, zscale)
@@ -27,6 +32,16 @@ is.quantized(x, scale, offset, ...)
 count_not_quantized(x, scale, offset)
 
 storable_coordinate_range(scale, offset)
+
+header(las)
+
+payload(las)
+
+phb(las)
+
+vlr(las)
+
+evlr(las)
 }
 \arguments{
 \item{las}{An object of class LAS}
@@ -43,9 +58,12 @@ storable_coordinate_range(scale, offset)
 
 \item{...}{Unused.}
 }
+\value{
+A LAS object, a vector or NULL if used for side effect of updating in place
+}
 \description{
 Tools to manipulate LAS objects maintaining compliance with
-\href{https://www.asprs.org/wp-content/uploads/2019/07/LAS_1_4_r15.pdf}{ASPRS specification}
+\href{https://community.asprs.org/leadership-restricted/leadership-content/public-documents/standards}{ASPRS specification}
 }
 \details{
 In the specification of the LAS format the coordinates are expected to be given
@@ -95,7 +113,7 @@ las <- las_rescale(las, xscale = 0.01, yscale = 0.01)
 las <- las_reoffset(las, xoffset = 300000, yoffset = 5248000)
 }
 \seealso{
-Other las utilities: 
-\code{\link{las_check}()}
+Other las utilities:
+\code{\link[=las_check]{las_check()}}
 }
 \concept{las utilities}

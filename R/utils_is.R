@@ -1,30 +1,3 @@
-# ===============================================================================
-#
-# PROGRAMMERS:
-#
-# jean-romain.roussel.1@ulaval.ca  -  https://github.com/Jean-Romain/lidR
-#
-# COPYRIGHT:
-#
-# Copyright 2016-2019 Jean-Romain Roussel
-#
-# This file is part of lidR R package.
-#
-# lidR is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>
-#
-# ===============================================================================
-
 #' A set of boolean tests on objects
 #'
 #' \code{is.empty} tests if a \code{LAS} object is a point cloud with 0 points.\cr
@@ -35,8 +8,7 @@
 #' Returns TRUE if the algorithm is at least partially parallelised i.e. if some portion of the code is
 #' computed in parallel.
 #'
-#' @param las A \code{LAS} object.
-#' @param x Any R object.
+#' @param x  \code{LAS} object or any R object.
 #' @param catalog A \code{LAScatalog} object.
 #' @param algorithm An \code{algorithm} object.
 #'
@@ -63,23 +35,24 @@
 #' @name is
 NULL
 
+#' @importFrom terra is.empty
 #' @rdname is
 #' @export
-is.empty <- function(las)
+setMethod("is.empty", "LAS", function(x)
 {
-  stopifnotlas(las)
-  return(nrow(las@data) == 0L)
-}
+  stopifnotlas(x)
+  return(nrow(x@data) == 0L)
+})
 
 #' @rdname is
 #' @export
 is.overlapping = function(catalog)
 {
-  spdf          <- as.spatial(catalog)
-  contour       <- rgeos::gUnaryUnion(spdf)
-  actual_area   <- contour@polygons[[1]]@area
-  average_area  <- actual_area / length(spdf)
-  measured_area <- area(catalog)
+  sfdf          <- catalog@data
+  contour       <- sf::st_union(sfdf)
+  actual_area   <- sf::st_area(contour)
+  average_area  <- actual_area / length(sfdf)
+  measured_area <- sum(sf::st_area(sfdf))
   actual_area   <- actual_area + 0.0000001 * average_area # fix #310
   return(actual_area < measured_area)
 }
@@ -108,3 +81,9 @@ is.parallelised = function(algorithm)
 
   return(is(algorithm, LIDRALGORITHMOPENMP))
 }
+
+is_raster <- function(raster)
+{
+  raster_is_supported(raster)
+}
+
